@@ -104,8 +104,8 @@ export function PaymentModal({ isOpen, onClose, sale, onSubmit }: PaymentModalPr
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="cash">Cash</SelectItem>
-                    <SelectItem value="card">Card</SelectItem>
-                    <SelectItem value="bank">Bank Transfer</SelectItem>
+                    <SelectItem value="pos">POS</SelectItem>
+                    <SelectItem value="transfer">Bank Transfer</SelectItem>
                   </SelectContent>
                 </Select>
               </div>

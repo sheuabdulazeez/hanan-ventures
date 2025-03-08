@@ -68,7 +68,7 @@ export function InvoiceModal({ isOpen, onClose, sale, paymentDetails }: InvoiceM
           </table>
 
           <div className="space-y-1">
-            <p>RECEIPT# {receiptNumber}</p>
+            <p>RECEIPT# {sale.id}</p>
             <p>DATE {new Date().toLocaleString('en-US', {
               weekday: 'short',
               year: 'numeric',
@@ -78,7 +78,7 @@ export function InvoiceModal({ isOpen, onClose, sale, paymentDetails }: InvoiceM
               minute: 'numeric',
               hour12: true
             })}</p>
-            <p>CUSTOMER: {sale.customer.name || 'DEFAULT CUSTOMER'}</p>
+            <p>CUSTOMER: {sale?.customer?.name || 'DEFAULT CUSTOMER'}</p>
             <p>OUTSTANDING: ₦{paymentDetails.payingAmount - paymentDetails.receivedAmount}</p>
             <p>CHANGE: ₦{paymentDetails.changeReturn}</p>
             <p>LOYALTY: 0</p>

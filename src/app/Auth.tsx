@@ -23,9 +23,6 @@ export default function Auth() {
           Hanan Ventures CRM
         </h1>
         <p className="text-xl text-white opacity-75">Secure Verification</p>
-        <p>
-          <Link to="/dashboard" className="text-white underline">Go to Dashboard</Link>
-        </p>
       </div>
       <AuthForm />
     </main>

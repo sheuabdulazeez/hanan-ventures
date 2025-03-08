@@ -17,7 +17,7 @@ interface CustomerSelectProps {
 }
 
 export function CustomerSelect({
-  customers,
+  customers=[],
   onSelect,
   onAddNew,
 }: CustomerSelectProps) {
@@ -25,7 +25,7 @@ export function CustomerSelect({
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
-  const filteredCustomers = customers.filter((customer) =>
+  const filteredCustomers = (customers || []).filter((customer) =>
     customer.name.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -62,12 +62,7 @@ export function CustomerSelect({
         {open && search && (
           <CommandList className="absolute z-50 top-10 w-full mt-1 bg-white rounded-lg border shadow-lg">
             <CommandGroup className="max-h-64 overflow-auto">
-              {/* {filteredCustomers.length && ( */}
-                <CommandItem onSelect={() => onAddNew(search)}>
-                  Create "{search}"
-                </CommandItem>
-              {/* // )} */}
-              {filteredCustomers.map((customer) => (
+              {filteredCustomers?.map((customer) => (
                 <CommandItem
                   key={customer.id}
                   onSelect={() => handleSelect(customer)}
@@ -76,6 +71,9 @@ export function CustomerSelect({
                 </CommandItem>
               ))}
             </CommandGroup>
+            <CommandItem onSelect={() => onAddNew(search)} key={"create-customer"}>
+              Create "{search}"
+            </CommandItem>
           </CommandList>
         )}
       </Command>

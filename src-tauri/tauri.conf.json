@@ -10,11 +10,13 @@
     "frontendDist": "../dist"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "title": "Hanan Ventures",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "alwaysOnTop": false
       }
     ],
     "security": {

@@ -16,6 +16,7 @@ import {
   FormMessage,
 } from "@components/ui/form"
 import { Loader2 } from 'lucide-react'
+import { createCustomer } from '@/database/customers'
 
 const customerSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters." }),
@@ -42,15 +43,20 @@ export default function AddCustomerPage() {
   async function onSubmit(data: CustomerFormValues) {
     setIsLoading(true)
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      
-      console.log('Customer data:', data)
+      await createCustomer({
+        name: data.name!,
+        email: data.email!,
+        phone: data.phone!,
+        address: data.address!,
+      })
       
       toast({
         title: "Success",
         description: "Customer added successfully!",
       })
+      
+      // Reset form
+      form.reset()
     } catch (error) {
       toast({
         title: "Error",

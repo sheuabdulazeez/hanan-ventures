@@ -23,68 +23,97 @@ import {
   CardHeader,
   CardTitle,
 } from "@components/ui/card";
-import { SALE_Sale, SALE_SaleItem } from "@/types/sales";
+import { SALE_SaleItem } from "@/types/sales";
 import {
-  customers as mockCustomers,
-  products as mockProducts,
-} from "@/lib/mock-data";
-import { Loader2, ShoppingCart, Trash2, Pause, Play, X, Plus } from 'lucide-react';
-import {
-  PaymentModal,
-  PaymentDetails,
-} from "@components/SalesPaymentModal";
+  Loader2,
+  ShoppingCart,
+  Trash2,
+  Pause,
+  Play,
+  X,
+  Plus,
+} from "lucide-react";
+import { PaymentModal, PaymentDetails } from "@components/SalesPaymentModal";
 import { InvoiceModal } from "@components/SaleInvoiceModal";
 import { ScrollArea } from "@components/ui/scroll-area";
 import { Badge } from "@components/ui/badge";
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from "@components/ui/sheet";
-import { TCustomer, TProduct } from "@/types/database";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "@components/ui/sheet";
+import { TCustomer, TProduct, TSale } from "@/types/database";
+import { getProducts } from "@/database/products";
+import { createCustomer, ensureWalkInCustomer, getCustomers } from "@/database/customers";
+import { createSale } from "@/database/sales";
+import { updateStock } from "@/database/products";
+import { useAppStore } from "@/lib/store";
+import { randomString } from "@/lib/utils";
 
 interface ActiveSale {
   id: string;
   customer: TCustomer | null;
   items: SALE_SaleItem[];
-  status: 'active' | 'paused' | 'completed';
+  status: "active" | "paused" | "completed";
   total: number;
 }
 
 export default function CreateSales() {
+  const { auth } = useAppStore();
   const [customers, setCustomers] = useState<TCustomer[]>([]);
   const [products, setProducts] = useState<TProduct[]>([]);
-  const [activeSales, setActiveSales] = useState<ActiveSale[]>([]);
-  const [currentSaleId, setCurrentSaleId] = useState<string | null>(null);
+  const [activeSales, setActiveSales] = useState<ActiveSale[]>(() => {
+    const initialSale: ActiveSale = {
+      id: `SALE ${randomString(8)}`,
+      customer: null,
+      items: [],
+      status: "active",
+      total: 0,
+    };
+    return [initialSale];
+  });
+  const [currentSaleId, setCurrentSaleId] = useState<string | null>(() => activeSales[0].id);
   const [isLoading, setIsLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
-  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails | null>(null);
+  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails | null>(
+    null
+  );
 
   useEffect(() => {
-    setCustomers(mockCustomers);
-    setProducts(mockProducts);
+    Promise.all([
+      ensureWalkInCustomer(),
+      getCustomers(),
+      getProducts()
+    ]).then(([_, customersRes, productsRes]) => {
+      setCustomers(customersRes);
+      setProducts(productsRes);
+    });
   }, []);
 
-  useEffect(() => {
-    if (activeSales.length === 0) {
-      createNewSale();
-    }
-  }, [activeSales]);
+
+
 
   const createNewSale = () => {
     const newSale: ActiveSale = {
-      id: `SALE${activeSales.length + 1}`,
+      id: `SALE ${randomString(8)}`,
       customer: null,
       items: [],
-      status: 'active',
-      total: 0
+      status: "active",
+      total: 0,
     };
-    setActiveSales([...activeSales, newSale]);
+    setActiveSales(prev => [...prev, newSale]);
     setCurrentSaleId(newSale.id);
   };
 
   const getCurrentSale = () => {
-    return activeSales.find(sale => sale.id === currentSaleId) || null;
+    return activeSales.find((sale) => sale.id === currentSaleId) || null;
   };
 
-  const handleAddCustomer = (name: string) => {
+  const handleAddCustomer = async (name: string) => {
     const newCustomer: TCustomer = {
       id: (customers.length + 1).toString(),
       name: name,
@@ -94,7 +123,8 @@ export default function CreateSales() {
       created_at: new Date().toDateString(),
       updated_at: new Date().toDateString(),
     };
-    setCustomers([...customers, newCustomer]);
+    const id = await createCustomer(newCustomer);
+    setCustomers([...customers, { id, ...newCustomer }]);
     updateCurrentSale({ customer: newCustomer });
     toast({
       title: "Success",
@@ -109,6 +139,18 @@ export default function CreateSales() {
     const existingItem = currentSale.items.find(
       (item) => item.product.id === product.id
     );
+
+    // Check if there's enough stock
+    const currentQuantity = existingItem ? existingItem.quantity : 0;
+    if (currentQuantity + 1 > product.quantity_on_hand) {
+      toast({
+        title: "Error",
+        description: "Not enough stock available.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (existingItem) {
       handleUpdateQuantity(
         currentSale.items.indexOf(existingItem),
@@ -124,7 +166,7 @@ export default function CreateSales() {
         unit_price: product.selling_price,
         total_price: product.selling_price,
         created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
       updateCurrentSale({
         items: [...currentSale.items, newSaleItem],
@@ -135,6 +177,16 @@ export default function CreateSales() {
   const handleUpdateQuantity = (index: number, quantity: number) => {
     const currentSale = getCurrentSale();
     if (!currentSale) return;
+
+    const item = currentSale.items[index];
+    if (quantity > item.product.quantity_on_hand) {
+      toast({
+        title: "Error",
+        description: "Not enough stock available.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const updatedItems = [...currentSale.items];
     updatedItems[index].quantity = quantity;
@@ -169,28 +221,55 @@ export default function CreateSales() {
     setIsLoading(true);
 
     const currentSale = getCurrentSale();
-    if (!currentSale) return;
+    if (!currentSale || !currentSale.customer) return;
 
-    const sale: SALE_Sale = {
-      customer: currentSale.customer!,
-      items: currentSale.items,
-      total: calculateTotal(currentSale),
-      date: new Date(),
-    };
+    try {
+      // Prepare sale data
+      const saleData = {
+        customer_id: currentSale.customer.id,
+        employee_id: auth.user.id, // TODO: Get from auth context
+        total_amount: currentSale.total,
+        discount: 0, // TODO: Add discount handling
+        bank_name: "",
+        payment_method: details.paymentMethod as any,
+        sale_date: new Date().toISOString(),
+      };
 
-    // Simulate API call
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Prepare sale items
+      const saleItems = currentSale.items.map((item) => ({
+        product_id: item.product.id,
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        total_price: item.quantity * item.unit_price,
+      }));
 
-    setPaymentDetails(details);
-    setShowPaymentModal(false);
-    setShowInvoiceModal(true);
-    setIsLoading(false);
+      // Create sale in database
+      const saleId = await createSale(saleData, saleItems);
 
-    // Mark the current sale as completed
-    updateCurrentSale({ status: 'completed' });
+      setPaymentDetails(details);
+      setShowPaymentModal(false);
+      setShowInvoiceModal(true);
 
-    // Create a new active sale
-    createNewSale();
+      // Mark the current sale as completed
+      updateCurrentSale({ status: "completed" });
+
+      // Create a new active sale
+      createNewSale();
+
+      toast({
+        title: "Success",
+        description: "Sale completed successfully!",
+      });
+    } catch (error) {
+      console.error("Failed to create sale:", error);
+      toast({
+        title: "Error",
+        description: "Failed to complete sale. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -220,27 +299,55 @@ export default function CreateSales() {
   };
 
   const updateCurrentSale = (updates: Partial<ActiveSale>) => {
-    setActiveSales(sales => sales.map(sale => 
-      sale.id === currentSaleId ? { ...sale, ...updates, total: calculateTotal({...sale, ...updates}) } : sale
-    ));
+    return new Promise<void>((resolve) => {
+      setActiveSales((prevSales) => {
+        const updatedSales = prevSales.map((sale) =>
+          sale.id === currentSaleId
+            ? {
+                ...sale,
+                ...updates,
+                total: calculateTotal({ ...sale, ...updates }),
+                status: updates.status || sale.status, // Ensure status is properly updated
+              }
+            : sale
+        );
+        setTimeout(() => resolve(), 0); // Ensure state update completes before resolving
+        return updatedSales;
+      });
+    });
   };
 
-  const pauseSale = () => {
-    updateCurrentSale({ status: 'paused' });
-    // Don't create a new sale immediately
+  const pauseSale = async () => {
+    const currentSale = getCurrentSale();
+    if (!currentSale || currentSale.items.length === 0 || currentSale.customer === null) {
+      toast({
+        title: "Error: Pause Sale",
+        description: "You need to add at least one product and select a customer before pausing the sale.",
+        variant: "destructive",
+      });
+      return;
+    }
+      await updateCurrentSale({ status: "paused" });
+      createNewSale();
+      toast({
+        title: "Success",
+        description: "Sale paused",
+      });
   };
 
   const resumeSale = (saleId: string) => {
-    setActiveSales(sales => sales.map(sale => 
-      sale.id === saleId ? { ...sale, status: 'active' } : sale
-    ));
+    setActiveSales((sales) =>
+      sales.map((sale) =>
+        sale.id === saleId ? { ...sale, status: "active" } : {...sale, status: "paused"}
+      )
+    );
     setCurrentSaleId(saleId);
   };
 
   const cancelSale = (saleId: string) => {
-    setActiveSales(sales => sales.filter(sale => sale.id !== saleId));
+    setActiveSales((sales) => sales.filter((sale) => sale.id !== saleId));
     if (saleId === currentSaleId) {
-      const activeSale = activeSales.find(sale => sale.status === 'active');
+      const activeSale = activeSales.find((sale) => sale.status === "active");
       setCurrentSaleId(activeSale ? activeSale.id : null);
     }
   };
@@ -252,10 +359,6 @@ export default function CreateSales() {
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Add New Sale</h1>
         <div className="space-x-2">
-          <Button variant="outline" onClick={createNewSale}>
-            <Plus className="mr-2 h-4 w-4" />
-            New Sale
-          </Button>
           <Sheet>
             <SheetTrigger asChild>
               <Button variant="outline">
@@ -271,37 +374,45 @@ export default function CreateSales() {
                 </SheetDescription>
               </SheetHeader>
               <ScrollArea className="h-[calc(100vh-120px)] w-full mt-4">
-                {activeSales.filter(sale => sale.id !== currentSaleId && sale.status === 'paused').map((sale) => (
-                  <div key={sale.id} className="mb-4 p-4 border rounded-md bg-white shadow-sm">
-                    <div className="flex justify-between items-center mb-2">
-                      <span className="font-bold text-lg">{sale.id}</span>
-                      <Badge variant="secondary">Paused</Badge>
+                {activeSales.length}
+                {activeSales
+                  .filter(
+                    (sale) =>
+                      sale.id !== currentSaleId && sale.status === "paused"
+                  )
+                  .map((sale) => (
+                    <div
+                      key={sale.id}
+                      className="mb-4 p-4 border rounded-md bg-white shadow-sm"
+                    >
+                      <div className="flex justify-between items-center mb-2">
+                        <span className="font-bold text-lg">{sale.id}</span>
+                        <Badge variant="secondary">Paused</Badge>
+                      </div>
+                      <div className="text-sm text-gray-600 mb-2">
+                        Customer: {sale.customer?.name || "Not selected"}
+                      </div>
+                      <div className="text-sm text-gray-600 mb-2">
+                        Items: {sale.items.length} | Total: ₦
+                        {sale.total.toFixed(2)}
+                      </div>
+                      <div className="flex space-x-2 mt-2">
+                        <Button size="sm" onClick={() => resumeSale(sale.id)}>
+                          <Play className="mr-2 h-4 w-4" />
+                          Resume Sale
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          onClick={() => cancelSale(sale.id)}
+                        >
+                          <X className="mr-2 h-4 w-4" />
+                          Cancel
+                        </Button>
+                      </div>
                     </div>
-                    <div className="text-sm text-gray-600 mb-2">
-                      Customer: {sale.customer?.name || 'Not selected'}
-                    </div>
-                    <div className="text-sm text-gray-600 mb-2">
-                      Items: {sale.items.length} | Total: ₦{sale.total.toFixed(2)}
-                    </div>
-                    <div className="flex space-x-2 mt-2">
-                      <Button size="sm" onClick={() => resumeSale(sale.id)}>
-                        <Play className="mr-2 h-4 w-4" />
-                        Resume Sale
-                      </Button>
-                      <Button size="sm" variant="destructive" onClick={() => cancelSale(sale.id)}>
-                        <X className="mr-2 h-4 w-4" />
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                ))}
+                  ))}
               </ScrollArea>
-              <div className="mt-4">
-                <Button className="w-full" onClick={createNewSale}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Sale
-                </Button>
-              </div>
             </SheetContent>
           </Sheet>
         </div>
@@ -366,7 +477,10 @@ export default function CreateSales() {
                             step="0.01"
                             value={item.unit_price}
                             onChange={(e) =>
-                              handleUpdatePrice(index, parseFloat(e.target.value))
+                              handleUpdatePrice(
+                                index,
+                                parseFloat(e.target.value)
+                              )
                             }
                             className="w-24"
                           />
@@ -401,7 +515,7 @@ export default function CreateSales() {
         </CardContent>
         <CardFooter className="flex justify-between">
           <div className="text-2xl font-bold">
-            Total: ₦{currentSale ? currentSale.total.toFixed(2) : '0.00'}
+            Total: ₦{currentSale ? currentSale.total.toFixed(2) : "0.00"}
           </div>
           <div className="space-x-2">
             <Button variant="outline" onClick={pauseSale}>
@@ -425,7 +539,7 @@ export default function CreateSales() {
       {showPaymentModal && currentSale && (
         <PaymentModal
           isOpen={showPaymentModal}
-          onClose={() => setShowPaymentModal(false)}
+          onClose={() =>{  setShowPaymentModal(false); setIsLoading(false)}}
           sale={{
             customer: currentSale.customer!,
             items: currentSale.items,
@@ -455,4 +569,3 @@ export default function CreateSales() {
     </div>
   );
 }
-

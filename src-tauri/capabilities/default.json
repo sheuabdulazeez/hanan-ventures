@@ -3,12 +3,20 @@
   "identifier": "default",
   "description": "Capability for the main window",
   "windows": [
-    "main"
+    "main",
+    "print"
   ],
   "permissions": [
     "core:default",
     "opener:default",
     "sql:default",
-    "sql:allow-execute"
+    "sql:allow-execute",
+    "store:default",
+    "core:webview:allow-print",
+    "core:window:allow-create",
+    "core:webview:default",
+    "core:webview:allow-create-webview-window",
+    "core:event:allow-listen",
+    "core:window:allow-close"
   ]
 }

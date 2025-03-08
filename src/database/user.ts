@@ -10,10 +10,10 @@ export async function getUsers() {
   }
 
 
-export async function create(user: Omit<TUser, "id" | "created_at">){
+export async function create(user: Omit<TUser, "id" | "created_at" | "updated_at">){
     const db = await initDatabase();
     const password = await bcrypt.hash(user.password, 10);
-    const {lastInsertId: id} = await db.execute('INSERT INTO users (name, username, password, role) VALUES ($1, $2, $3, $4)', [user.name, user.username, password, "user"]);
+    const {lastInsertId: id} = await db.execute('INSERT INTO users (name, username, password, role) VALUES ($1, $2, $3, $4)', [user.name, user.username, password, user.role]);
     return id;
 }
   export async function initializeSuperUser(){

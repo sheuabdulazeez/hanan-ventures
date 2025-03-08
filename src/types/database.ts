@@ -1,5 +1,9 @@
 export type PaymentMethod = 'cash' | 'pos' | 'transfer';
-export type UserRole = 'admin' | 'manager' | 'sales';
+export enum UserRole {
+  admin = 'admin',
+  manager = 'manager',
+  cashier = 'sales',
+};
 export type PurchaseOrderStatus = 'pending' | 'partially_received' | 'received' | 'cancelled';
 export type ReceiptStatus = 'pending' | 'approved' | 'rejected';
 
@@ -24,7 +28,7 @@ export type TUser = {
   name: string;
   username: string;
   phone: string;
-  password: string;
+  password?: string;
   isActive: boolean;
   role: UserRole;
   created_at: string;
@@ -69,7 +73,9 @@ export type TSale = {
   id: string;
   sale_date: string;
   customer_id: string;
+  customer_name?:string;
   employee_id: string;
+  employee_name?:string;
   total_amount: number;
   discount: number;
   payment_method: PaymentMethod;
@@ -82,6 +88,7 @@ export type TSaleItem = {
   id: string;
   sale_id: string;
   product_id: string;
+  product_name?:string;
   quantity: number;
   unit_price: number;
   total_price: number;

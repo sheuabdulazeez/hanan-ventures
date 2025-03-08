@@ -18,6 +18,8 @@ import {
   SidebarMenuSubItem,
 } from "./ui/sidebar"
 import { Link } from "react-router"
+import { useAppStore } from "@/lib/store"
+import { UserRole } from "@/types/database"
 
 export function NavMain({
   items,
@@ -27,16 +29,19 @@ export function NavMain({
     url: string
     icon?: LucideIcon
     isActive?: boolean
+    role?: UserRole[]
     items?: {
       title: string
       url: string
     }[]
   }[]
 }) {
+  const { auth } = useAppStore()
+
   return (
     <SidebarGroup>
       <SidebarMenu>
-        {items.map((item) => (
+        {items.map((item) => item.role && !item.role.includes(auth.user?.role) ? null : (
           <>
             {item.items ? (
               <Collapsible

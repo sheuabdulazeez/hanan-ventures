@@ -1,35 +1,38 @@
+import { getProducts } from '@/database/products';
+import { TProduct } from '@/types/database';
 import { useEffect, useState } from 'react';
 import { FaTrash, FaFileExport, FaFileImport, FaPlus } from 'react-icons/fa';
 import { Link } from 'react-router';
 
-interface Email {
-  id: number;
-  email: string;
-}
-
 export default function Stocks() {
-  const [emails, setEmails] = useState<Email[]>([]);
+  const [products, setProducts] = useState<TProduct[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const emailsPerPage = 10;
+  const itemPerPage = 10;
 
-  const filteredEmails = emails.filter(email =>
-    email.email.toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredProducts = products.filter(p =>
+    p.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
 
 
-  const handleDelete = (id: number) => {
+  const handleDelete = (id: string) => {
     // TODO: handle delete
   };
+
+  useEffect(() => {
+    getProducts().then(res => {
+      setProducts(res);
+    })
+  }, [])
   
-  const indexOfLastEmail = currentPage * emailsPerPage;
-  const indexOfFirstEmail = indexOfLastEmail - emailsPerPage;
-  const currentEmails = filteredEmails.slice(indexOfFirstEmail, indexOfLastEmail);
+  const indexOfLastItem = currentPage * itemPerPage;
+  const indexOfFirstItem = indexOfLastItem - itemPerPage;
+  const currentProducts = filteredProducts.slice(indexOfFirstItem, indexOfLastItem);
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
-  const totalPages = Math.ceil(filteredEmails.length / emailsPerPage);
+  const totalPages = Math.ceil(filteredProducts.length / itemPerPage);
   const maxPageButtons = 5;
   const startPage = Math.max(1, currentPage - Math.floor(maxPageButtons / 2));
   const endPage = Math.min(totalPages, startPage + maxPageButtons - 1);
@@ -67,12 +70,16 @@ export default function Stocks() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {currentEmails.map((email) => (
-              <tr key={email.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{email.email}</td>
+            {currentProducts.map((p) => (
+              <tr key={p.id}>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{p.name}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{p.category}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₦{p.cost_price}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">₦{p.selling_price}</td>
+                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{p.quantity_on_hand}</td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <button
-                    onClick={() => handleDelete(email.id)}
+                    onClick={() => handleDelete(p.id)}
                     className="text-red-600 hover:text-red-900"
                   >
                     <FaTrash />

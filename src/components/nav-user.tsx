@@ -29,19 +29,14 @@ import {
   SidebarMenuItem,
   useSidebar,
 } from "./ui/sidebar"
+import { useAppStore } from "@/lib/store"
 
 
 export function NavUser() {
-  const user = {
-    name: "Cristian Navarro",
-    username: "@cnavarro",
-  }
+  const { auth, logout } = useAppStore()
   const { isMobile } = useSidebar()
 
-
-  const logOut = async () => {
-    // TODO: logout
-  }
+const user = auth.user;
 
   return (
     <SidebarMenu>
@@ -88,7 +83,7 @@ export function NavUser() {
               </DropdownMenuItem>
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
-            <DropdownMenuItem className="text-red-500 hover:text-red-600" onClick={logOut}>
+            <DropdownMenuItem className="text-red-500 hover:text-red-600" onClick={logout}>
               <LogOut />
               Log out
             </DropdownMenuItem>

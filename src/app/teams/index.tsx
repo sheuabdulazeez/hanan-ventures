@@ -17,6 +17,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@components/ui/table"
 import { Switch } from "@components/ui/switch"
+import { create, getUsers } from "@/database/user"
+import { TUser, UserRole } from "@/types/database"
+import { useAppStore } from "@/lib/store"
 
 const teamMemberSchema = z.object({
   name: z.string().min(2, {
@@ -34,9 +37,9 @@ const teamMemberSchema = z.object({
       message: "Password must be at least 6 characters.",
     })
     .optional(),
-  role: z.enum(["admin", "cashier", "manager"], {
+  role: z.nativeEnum(UserRole, {
     required_error: "Please select a role.",
-  }),
+  }).default(UserRole.cashier),
   isActive: z.boolean().default(true),
 })
 
@@ -47,11 +50,12 @@ interface TeamMember extends Omit<TeamMemberValues, "password"> {
 }
 
 const defaultValues: Partial<TeamMemberValues> = {
-  role: "cashier",
+  role: UserRole.cashier,
   isActive: true,
 }
 
 export default function TeamMembersPage() {
+  const { auth: { user } } = useAppStore()
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null)
@@ -61,45 +65,55 @@ export default function TeamMembersPage() {
     defaultValues,
   })
 
-  function onSubmit(data: TeamMemberValues) {
+  async function onSubmit(data: TeamMemberValues) {
     setIsSubmitting(true)
-    // Simulate API call
-    setTimeout(() => {
-      if (editingMember) {
-        // // Update existing member
-        // window.ipcRenderer.invoke("update-user", editingMember).then((res) => {
-        //   setTeamMembers(
-        //     teamMembers.map((member) =>
-        //       member.id === editingMember.id ? { ...member, ...data, password: undefined } : member,
-        //     ),
-        //   )
-        // })
-        
-        setEditingMember(null)
-        toast({
-          title: "Team member updated",
-          description: `${data.name}'s information has been updated.`,
-        })
-      } else {
-        // Add new member
-        const newTeamMember: Partial<TeamMember> = {
-          ...data,
-        }
+    if (editingMember) {
+      // // Update existing member
+      
+      // window.ipcRenderer.invoke("update-user", editingMember).then((res) => {
+      //   setTeamMembers(
+      //     teamMembers.map((member) =>
+      //       member.id === editingMember.id ? { ...member, ...data, password: undefined } : member,
+      //     ),
+      //   )
+      // })
+      
+      setEditingMember(null)
+      toast({
+        title: "Team member updated",
+        description: `${data.name}'s information has been updated.`,
+      })
+    } else {
 
-        // window.ipcRenderer.invoke("create-user", newTeamMember).then((res) => {
-        //   setTeamMembers([...teamMembers, {...newTeamMember, id: res.id}]);
 
-        //   toast({
-        //     title: "Team member added",
-        //     description: `${data.name} has been added to the team.`,
-        //   })
-        // })
-
-        
+      // Add new member
+      const newTeamMember  = {  
+        ...data,
+        name: data.name!,
+        username: data.username!,
+        password: data.password!,
+        role: data.role!,
       }
-      setIsSubmitting(false)
-      form.reset(defaultValues)
-    }, 1000)
+
+      await create(newTeamMember as Omit<TUser, "id" | "created_at" | "updated_at">)
+      .then((e) => {
+        console.log(e)
+        getUsers().then(users => setTeamMembers(users))
+        toast({
+          title: "Team member added",
+          description: `${data.name} has been added to the team.`,
+        })
+      }).catch(err => {
+        setIsSubmitting(false);
+        toast({
+          title: "Error!",
+          description: err.includes("UNIQUE") ? "Username already exists" : "Something went wrong",
+          variant: "destructive"
+        })
+      })
+    }
+    setIsSubmitting(false)
+    // form.reset(defaultValues)
   }
 
   function handleEdit(member: TeamMember) {
@@ -121,13 +135,9 @@ export default function TeamMembersPage() {
     }
   }
 
-  const fetchMembers = async () => {
-    // const teamMembers = await window.ipcRenderer.invoke('get-users');
-    // setTeamMembers(teamMembers);
-  }
 
   useEffect(() => {
-    fetchMembers();
+    getUsers().then(users => setTeamMembers(users))
   }, []);
 
   return (
@@ -164,7 +174,7 @@ export default function TeamMembersPage() {
                     <FormItem>
                       <FormLabel>Username</FormLabel>
                       <FormControl>
-                        <Input {...field} />
+                        <Input {...field} autoCapitalize="off" autoComplete="off" autoCorrect="off"  />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -209,9 +219,9 @@ export default function TeamMembersPage() {
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          <SelectItem value="admin">Admin</SelectItem>
-                          <SelectItem value="manager">Manager</SelectItem>
-                          <SelectItem value="cashier">Cashier</SelectItem>
+                          <SelectItem value={UserRole.admin}>Admin</SelectItem>
+                          <SelectItem value={UserRole.manager}>Manager</SelectItem>
+                          <SelectItem value={UserRole.cashier}>Cashier</SelectItem>
                         </SelectContent>
                       </Select>
                       <FormMessage />
@@ -263,10 +273,10 @@ export default function TeamMembersPage() {
                     <TableCell>{member.phone}</TableCell>
                     <TableCell className="capitalize">{member.role}</TableCell>
                     <TableCell>
-                      <Switch checked={member.isActive} onCheckedChange={() => handleToggleActive(member.id)} />
+                      <Switch disabled={user.id === member.id} checked={member.isActive} onCheckedChange={() => user.id === member.id?null: handleToggleActive(member.id)} />
                     </TableCell>
                     <TableCell>
-                      <Button variant="outline" size="sm" onClick={() => handleEdit(member)}>
+                      <Button disabled={user.id === member.id} variant="outline" size="sm" onClick={() => user.id === member.id ? null : handleEdit(member)}>
                         Edit
                       </Button>
                     </TableCell>

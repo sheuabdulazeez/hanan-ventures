@@ -1,106 +1,120 @@
-import { useEffect, useState } from 'react';
-import { FaTrash, FaFileExport, FaFileImport, FaPlus } from 'react-icons/fa';
-import { Link } from 'react-router';
-
-interface Email {
-  id: number;
-  email: string;
-}
+import { useEffect, useState } from 'react'
+import { getCustomers } from '@/database/customers'
+import { TCustomer } from '@/types/database'
+import { Button } from "@/components/ui/button"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
+import { Search } from 'lucide-react'
+import { Link } from 'react-router'
+import { CustomerDetails } from "@/components/CustomerDetails"
 
 export default function Customers() {
-  const [emails, setEmails] = useState<Email[]>([]);
-  const [searchTerm, setSearchTerm] = useState<string>('');
-  const [currentPage, setCurrentPage] = useState<number>(1);
-  const emailsPerPage = 10;
+  const [customers, setCustomers] = useState<TCustomer[]>([])
+  const [searchQuery, setSearchQuery] = useState('')
+  const [isLoading, setIsLoading] = useState(true)
+  const [selectedCustomer, setSelectedCustomer] = useState<TCustomer | null>(null)
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false)
 
-  const filteredEmails = emails.filter(email =>
-    email.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  useEffect(() => {
+    loadCustomers()
+  }, [])
 
+  async function loadCustomers() {
+    try {
+      const data = await getCustomers()
+      setCustomers(data)
+    } catch (error) {
+      console.error('Failed to load customers:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-
-  const handleDelete = (id: number) => {
-    
-  };
-
-  const indexOfLastEmail = currentPage * emailsPerPage;
-  const indexOfFirstEmail = indexOfLastEmail - emailsPerPage;
-  const currentEmails = filteredEmails.slice(indexOfFirstEmail, indexOfLastEmail);
-
-  const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
-
-  const totalPages = Math.ceil(filteredEmails.length / emailsPerPage);
-  const maxPageButtons = 5;
-  const startPage = Math.max(1, currentPage - Math.floor(maxPageButtons / 2));
-  const endPage = Math.min(totalPages, startPage + maxPageButtons - 1);
+  const filteredCustomers = customers.filter(customer => 
+    customer.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    customer.phone?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    customer.email?.toLowerCase().includes(searchQuery.toLowerCase())
+  )
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-800">Customers</h1>
-        <div className="space-x-2 flex">
-          {/* Add Product Button Link */}
-          <Link to="/dashboard/customers/create" className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-full flex items-center transition duration-300">
-          <FaPlus className="mr-2" /> Add Customer
+    <div className="container mx-auto py-10">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Customers</h1>
+        <Link to="/dashboard/customers/create">
+          <Button>Add New Customer</Button>
         </Link>
-        </div>
       </div>
-      <div className="flex justify-between items-center">
-        <input
-          type="text"
-          placeholder="Search customer..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="border border-gray-300 rounded-md py-2 px-4 w-full"
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center space-x-2">
+            <Search className="w-4 h-4 text-gray-500" />
+            <Input
+              placeholder="Search customers..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="max-w-sm"
+            />
+          </div>
+        </CardHeader>
+        <CardContent>
+        {isLoading ? (
+          <div className="flex justify-center items-center h-32">
+            Loading customers...
+          </div>
+        ) : (
+          <Table>
+            <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Phone</TableHead>
+                  <TableHead>Address</TableHead>
+                  <TableHead>Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+            <TableBody>
+              {filteredCustomers.map((customer) => (
+                <TableRow key={customer.id}>
+                  <TableCell>{customer.name}</TableCell>
+                  <TableCell>{customer.email}</TableCell>
+                  <TableCell>{customer.phone}</TableCell>
+                  <TableCell>{customer.address}</TableCell>
+                  <TableCell>
+                    <Button 
+                      variant="outline" 
+                      size="sm"
+                      onClick={() => {
+                        setSelectedCustomer(customer)
+                        setIsDetailsOpen(true)
+                      }}
+                    >
+                      View Details
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+              {/* ... empty state row remains the same ... */}
+            </TableBody>
+          </Table>
+        )}
+      </CardContent>
+      {selectedCustomer && (
+        <CustomerDetails
+          customer={selectedCustomer}
+          open={isDetailsOpen}
+          onOpenChange={setIsDetailsOpen}
         />
-      </div>
-      <div className="bg-white shadow-md rounded-lg overflow-hidden">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Business Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">First Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Last Name</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Email</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Phone</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Address</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Date Created</th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Action</th>
-            </tr>
-          </thead>
-          <tbody className="bg-white divide-y divide-gray-200">
-            {currentEmails.map((email) => (
-              <tr key={email.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{email.email}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button
-                    onClick={() => handleDelete(email.id)}
-                    className="text-red-600 hover:text-red-900"
-                  >
-                    <FaTrash />
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <div className="flex justify-center mt-4">
-        <nav>
-          <ul className="inline-flex items-center -space-x-px">
-            {Array.from({ length: endPage - startPage + 1 }, (_, index) => (
-              <li key={index}>
-                <button
-                  onClick={() => paginate(startPage + index)}
-                  className={`px-3 py-2 leading-tight ${currentPage === startPage + index ? 'bg-blue-500 text-white' : 'bg-white text-gray-500'} border border-gray-300 hover:bg-gray-100 hover:text-gray-700`}
-                >
-                  {startPage + index}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
-      </div>
+      )}
+      </Card>
     </div>
-  );
+  )
 }

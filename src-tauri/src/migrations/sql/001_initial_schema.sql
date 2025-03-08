@@ -159,3 +159,18 @@ CREATE TABLE IF NOT EXISTS business_expenses (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- DROP TABLE IF EXISTS business_expenses;
+-- DROP TABLE IF EXISTS purchase_receipt_items;
+-- DROP TABLE IF EXISTS purchase_receipts;
+-- DROP TABLE IF EXISTS purchase_order_items;
+-- DROP TABLE IF EXISTS purchase_orders;
+-- DROP TABLE IF EXISTS debtor_payments;
+-- DROP TABLE IF EXISTS debtors;
+-- DROP TABLE IF EXISTS sale_items;
+-- DROP TABLE IF EXISTS sales;
+-- DROP TABLE IF EXISTS products;
+-- DROP TABLE IF EXISTS suppliers;
+-- DROP TABLE IF EXISTS customers;
+-- DROP TABLE IF EXISTS users;
+

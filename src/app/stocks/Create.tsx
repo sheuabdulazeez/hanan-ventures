@@ -10,6 +10,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
 import { useState } from 'react'
+import { createProduct } from '@/database/products'
+import { useNavigate } from 'react-router'
 
 
 const formSchema = z.object({
@@ -34,6 +36,7 @@ const formSchema = z.object({
 })
 
 export default function CreateStock() {
+  const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(false)
   const [previewImage, setPreviewImage] = useState<string | null>(null)
 
@@ -44,20 +47,27 @@ export default function CreateStock() {
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true)
     try {
-      const formData = new FormData()
-      Object.entries(values).forEach(([key, value]) => {
-          formData.append(key, value.toString())
+      await createProduct({
+        name: values.name,
+        cost_price: values.costPrice,
+        selling_price: values.salesPrice,
+        category: values.category,
+        quantity_on_hand: values.stock,
+      }).then(res => {
+        toast({
+            title: "Success",
+            description: "Product added successfully.",
+        })
+        form.reset();
+        navigate("/dashboard/stocks")
+      }).catch(err => {
+        console.log(err)
+        toast({
+          title: "Error",
+          description: "Failed to add product. Please try again.",
+          variant: "destructive",
+        })
       })
-
-      // const result = await addProduct(formData)
-      // if (result.success) {
-      //   toast({
-      //     title: "Success",
-      //     description: result.message,
-      //   })
-      // } else {
-      //   throw new Error(result.message)
-      // }
     } catch (error) {
       toast({
         title: "Error",

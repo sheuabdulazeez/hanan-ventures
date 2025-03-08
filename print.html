@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+</head>
+<body>
+    <div id="print-content"></div>
+
+    <script>
+        const { listen, emit } = window.__TAURI__.event
+
+        listen('print-content', ({payload}) => {
+            document.getElementById('print-content').innerHTML = payload.html;
+            window.print()
+        })
+
+        window.onload = () => {
+            emit("loaded")
+            window.matchMedia('print').addListener(function(mql) {
+                if (!mql.matches) {
+                    emit("close")
+                }
+            });
+
+        }
+    </script>
+</body>
+</html>

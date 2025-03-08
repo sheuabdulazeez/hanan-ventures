@@ -2,8 +2,11 @@ import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { toast } from '../hooks/use-toast'
 import { login } from '@/database/user'
+import { useAppStore } from '@/lib/store'
 
 export default function AuthForm() {
+  const { setUser } = useAppStore();
+
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [isVerifying, setIsVerifying] = useState(false)
@@ -20,6 +23,7 @@ export default function AuthForm() {
         setIsVerifying(false)
         return
       }
+      setUser(res);
       toast({ title: 'Login successful', variant: "default" })
     }).catch(err => {
       toast({ variant: "destructive", title: 'Error', description: err.message })

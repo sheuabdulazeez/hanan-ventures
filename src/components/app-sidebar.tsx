@@ -68,6 +68,7 @@ const data = {
       title: "Admin",
       url: "#",
       icon: Bot,
+      role: ["admin"],
       items: [
         {
           title: "Suppliers",
@@ -91,24 +92,7 @@ const data = {
         },
       ],
     },
-  ],
-  projects: [
-    {
-      name: "Design Engineering",
-      url: "#",
-      icon: Frame,
-    },
-    {
-      name: "Sales & Marketing",
-      url: "#",
-      icon: PieChart,
-    },
-    {
-      name: "Travel",
-      url: "#",
-      icon: Map,
-    },
-  ],
+  ]
 };
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -168,7 +152,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         
-        <NavMain items={data.navMain} />
+        <NavMain items={data.navMain as any} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser />
