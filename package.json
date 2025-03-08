@@ -9,6 +9,7 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tdev": "tauri dev",
+    "tbuild": "tauri build",
     "tios": "tauri ios dev"
   },
   "dependencies": {

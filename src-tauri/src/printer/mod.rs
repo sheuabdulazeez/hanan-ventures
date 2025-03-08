@@ -19,7 +19,7 @@ pub async fn open_print_window(handle: tauri::AppHandle, html_content: String) -
     .map_err(|e| e.to_string())?;
     
     if let Err(e) = WebviewWindow::set_shadow(&print_window, true) {
-        println!("Failed to add shadow: {}", e);
+        panic!("Failed to add shadow: {}", e);
     }
 
     Ok(())
