@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "hanan-ventures",
+  "productName": "Hanan Ventures",
   "version": "0.1.0",
   "identifier": "com.hanan-ventures.app",
   "build": {
@@ -15,8 +15,7 @@
       {
         "title": "Hanan Ventures",
         "width": 800,
-        "height": 600,
-        "alwaysOnTop": false
+        "height": 600
       }
     ],
     "security": {
