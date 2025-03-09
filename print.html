@@ -3,14 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <meta http-equiv="Content-Type" content="text/html; charset=CP437">
+    <title>Print Receipt</title>
+    <style>
+        @media print {
+            @page {
+                size: 72mm 297mm;
+                margin: 0;
+            }
+            
+            body {
+                font-family: 'Courier New', monospace;
+                font-size: 12px;
+                line-height: 24px;
+                width: 72mm;
+                margin: 0;
+                padding: 0;
+            }
+
+            #print-content {
+                width: 100%;
+                padding: 5mm;
+                box-sizing: border-box;
+            }
+        }
+    </style>
 </head>
 <body>
     <div id="print-content"></div>
 
     <script>
-        
-
         window.onload = () => {
             const { listen, emit } = window.__TAURI__.event
 
@@ -24,7 +46,6 @@
                     emit("close")
                 }
             });
-
         }
     </script>
 </body>
