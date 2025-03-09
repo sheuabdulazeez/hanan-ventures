@@ -9,6 +9,7 @@ import { Buffer } from "buffer";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { Window } from "@tauri-apps/api/window";
 import { useRef } from "react";
+import { invoiceHtml } from "@/lib/utils";
 
 
 interface InvoiceModalProps {
@@ -31,32 +32,7 @@ export function InvoiceModal({
     if (!content) return;
 
     // try {
-      const htmlContent = `
-      <!DOCTYPE html>
-      <html>
-        <head>
-          <style>
-            body { font-family: system-ui, sans-serif; padding: 2rem; }
-            .text-center { text-align: center; }
-            .text-right { text-align: right; }
-            .mb-6 { margin-bottom: 1.5rem; }
-            .py-2 { padding: 0.5rem 0; }
-            .border-b { border-bottom: 1px solid #e5e7eb; }
-            .border-t { border-top: 1px solid #e5e7eb; }
-            .font-bold { font-weight: bold; }
-            table { width: 100%; border-collapse: collapse; }
-            th, td { padding: 0.5rem; }
-            @media print {
-              @page { margin: 0.5cm; }
-              body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-            }
-          </style>
-        </head>
-        <body>
-          ${content.innerHTML}
-        </body>
-      </html>
-    `;
+      const htmlContent = invoiceHtml(sale, items)
 
      printWindow.current = new WebviewWindow("print", {
       url: "/print.html",
