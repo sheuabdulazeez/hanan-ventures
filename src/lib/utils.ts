@@ -68,7 +68,7 @@ return `
         <p>Invoice #: <span class="uppercase">${shortInvoiceId}</span></p>
       </div>
       <div class="text-right">
-        <p>Date: ${format(new Date(sale.created_at), "PPP")}</p>
+        <p>Date: ${format(new Date(sale.created_at), "dd/mm/yyyy")}</p>
         <p>Time: ${format(new Date(sale.created_at), "pp")}</p>
         <p>Cashier: ${sale.employee_name}</p>
       </div>
