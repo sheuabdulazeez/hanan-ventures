@@ -23,9 +23,9 @@ export const invoiceHtml = (sale: Omit<TSale, 'updated_at' | 'sale_date' | 'cust
 return `
   <style>
     body { font-family: system-ui, sans-serif; font-size: 12px;
-      line-height: 24px; margin: 0;  padding: 0;
+      line-height: 24px; margin: 0;  padding: 1rem 0;
       }
-    .container { padding: 1.5rem; margin: 24px auto;  font-size: 0.875rem; }
+    .container { padding: 1rem; margin: 2rem auto;  font-size: 0.875rem; }
     .text-center { text-align: center; }
     .text-right { text-align: right; }
     .text-left { text-align: left; }
