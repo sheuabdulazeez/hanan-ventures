@@ -359,10 +359,10 @@ export default function DashboardPage() {
                 {debtorsList.length ? (
                   debtorsList.map((debtor) => (
                     <TableRow key={debtor.id}>
-                      <TableCell>{debtor.name}</TableCell>
-                      <TableCell>₦{debtor.amount.toFixed(2)}</TableCell>
+                      <TableCell>{debtor.customer_name}</TableCell>
+                      <TableCell>₦{debtor.amount_owed.toFixed(2)}</TableCell>
                       <TableCell>
-                        {format(debtor.dueDate, "MMM dd, yyyy")}
+                        {format(debtor.due_date, "MMM dd, yyyy")}
                       </TableCell>
                     </TableRow>
                   ))

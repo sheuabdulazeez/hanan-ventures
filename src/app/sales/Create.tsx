@@ -34,7 +34,7 @@ import {
   Plus,
 } from "lucide-react";
 import { PaymentModal, PaymentDetails } from "@components/SalesPaymentModal";
-import { InvoiceModal } from "@components/SaleInvoiceModal";
+import { InvoiceModal } from "@components/InvoiceModal";
 import { ScrollArea } from "@components/ui/scroll-area";
 import { Badge } from "@components/ui/badge";
 import {
@@ -125,7 +125,7 @@ export default function CreateSales() {
     };
     const id = await createCustomer(newCustomer);
     setCustomers([...customers, { id, ...newCustomer }]);
-    updateCurrentSale({ customer: newCustomer });
+    updateCurrentSale({ customer: { id, ...newCustomer } });
     toast({
       title: "Success",
       description: `New customer "${name}" created.`,
@@ -219,6 +219,7 @@ export default function CreateSales() {
 
   const handlePaymentSubmit = async (details: PaymentDetails) => {
     setIsLoading(true);
+    console.log(details)
 
     const currentSale = getCurrentSale();
     if (!currentSale || !currentSale.customer) return;
@@ -231,6 +232,7 @@ export default function CreateSales() {
         total_amount: currentSale.total,
         discount: 0, // TODO: Add discount handling
         bank_name: "",
+        amount_paid: details.receivedAmount,
         payment_method: details.paymentMethod as any,
         sale_date: new Date().toISOString(),
       };
@@ -351,9 +353,7 @@ export default function CreateSales() {
       setCurrentSaleId(activeSale ? activeSale.id : null);
     }
   };
-
   const currentSale = getCurrentSale();
-
   return (
     <div className="container mx-auto py-10">
       <div className="flex justify-between items-center mb-6">
@@ -541,6 +541,7 @@ export default function CreateSales() {
           isOpen={showPaymentModal}
           onClose={() =>{  setShowPaymentModal(false); setIsLoading(false)}}
           sale={{
+            id: currentSale.id,
             customer: currentSale.customer!,
             items: currentSale.items,
             total: currentSale.total,
@@ -550,20 +551,28 @@ export default function CreateSales() {
         />
       )}
 
-      {showInvoiceModal && paymentDetails && currentSale && (
+      {showInvoiceModal && paymentDetails && paymentDetails.saleId && (
         <InvoiceModal
-          isOpen={showInvoiceModal}
-          onClose={() => {
-            setShowInvoiceModal(false);
-            createNewSale();
-          }}
+          open={showInvoiceModal}
+          onOpenChange={setShowInvoiceModal}
           sale={{
-            customer: currentSale.customer!,
-            items: currentSale.items,
-            total: currentSale.total,
-            date: new Date(),
+            id: activeSales.find(s => s.id === paymentDetails.saleId).id,
+            total_amount: activeSales.find(s => s.id === paymentDetails.saleId).total,
+            bank_name: paymentDetails.account,
+            discount: 0,
+            employee_id: auth.user.id,
+            payment_method: paymentDetails.paymentMethod,
+            created_at: new Date().toISOString(),
+            amount_paid: paymentDetails.receivedAmount,
+            customer_name: activeSales.find(s => s.id === paymentDetails.saleId).customer!.name,
+            employee_name: auth.user.name,
           }}
-          paymentDetails={paymentDetails}
+          items={activeSales.find(s => s.id === paymentDetails.saleId).items.map((item) => ({
+            product_name: item.product.name,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            total_price: item.quantity * item.unit_price,
+          }))}
         />
       )}
     </div>

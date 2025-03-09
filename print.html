@@ -9,14 +9,15 @@
     <div id="print-content"></div>
 
     <script>
-        const { listen, emit } = window.__TAURI__.event
-
-        listen('print-content', ({payload}) => {
-            document.getElementById('print-content').innerHTML = payload.html;
-            window.print()
-        })
+        
 
         window.onload = () => {
+            const { listen, emit } = window.__TAURI__.event
+
+            listen('print-content', ({payload}) => {
+                document.getElementById('print-content').innerHTML = payload.html;
+                window.print();
+            });
             emit("loaded")
             window.matchMedia('print').addListener(function(mql) {
                 if (!mql.matches) {

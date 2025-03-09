@@ -1,5 +1,6 @@
 import { TSale, TSaleItem } from "@/types/database";
 import { initDatabase } from ".";
+import { handleSaleDebt } from "./debtors";
 
 export async function getSales() {
     const db = await initDatabase();
@@ -40,11 +41,12 @@ export async function createSale(sale: Omit<TSale, "id" | "created_at" | "update
     const db = await initDatabase();
     
     try {
+        // Generate sale ID
+        const [{ id: saleId }] = await db.select<[{ id: string }]>('SELECT lower(hex(randomblob(16))) as id');
+        
         // Build all queries as a single transaction
         let queries = ['BEGIN TRANSACTION;'];
         
-        // Generate sale ID
-        const [{ id: saleId }] = await db.select<[{ id: string }]>('SELECT lower(hex(randomblob(16))) as id');
         
         // Add sale record query
         queries.push(`
@@ -71,6 +73,17 @@ export async function createSale(sale: Omit<TSale, "id" | "created_at" | "update
         // Execute all queries in one go
         await db.execute(queries.join('\n'));
         
+        // Handle debt if partial payment
+        if (sale.amount_paid < sale.total_amount) {
+            await handleSaleDebt(
+                saleId,
+                sale.customer_id,
+                sale.total_amount,
+                sale.amount_paid,
+                new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Default due date: 1 week
+            );
+        }
+
         return saleId;
     } catch (error) {
         console.error('Sale creation error:', error);

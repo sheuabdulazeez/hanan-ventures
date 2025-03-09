@@ -76,6 +76,7 @@ export type TSale = {
   customer_name?:string;
   employee_id: string;
   employee_name?:string;
+  amount_paid?:number;
   total_amount: number;
   discount: number;
   payment_method: PaymentMethod;
@@ -100,6 +101,7 @@ export type TDebtor = {
   id: string;
   sale_id: string;
   customer_id: string;
+  customer_name?:string;
   amount_owed: number;
   due_date: string;
   is_paid: boolean;
@@ -115,6 +117,7 @@ export type TDebtorPayment = {
   bank_name: string;
   amount_paid: number;
   employee_id: string;
+  employee_name?:string;
   created_at: string;
   updated_at: string;
 }

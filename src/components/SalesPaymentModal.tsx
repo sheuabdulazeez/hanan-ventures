@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "../components/ui/select"
 import { SALE_Sale } from '@/types/sales'
+import { PaymentMethod } from '@/types/database'
 
 interface PaymentModalProps {
   isOpen: boolean
@@ -21,10 +22,11 @@ interface PaymentModalProps {
 }
 
 export interface PaymentDetails {
+  saleId: string
   receivedAmount: number
   payingAmount: number
   changeReturn: number
-  paymentMethod: string
+  paymentMethod: PaymentMethod
   account: string
   paymentNotes: string
   saleNotes: string
@@ -32,6 +34,7 @@ export interface PaymentDetails {
 
 export function PaymentModal({ isOpen, onClose, sale, onSubmit }: PaymentModalProps) {
   const [paymentDetails, setPaymentDetails] = useState<PaymentDetails>({
+    saleId: sale.id,
     receivedAmount: sale.total,
     payingAmount: sale.total,
     changeReturn: 0,
@@ -97,7 +100,7 @@ export function PaymentModal({ isOpen, onClose, sale, onSubmit }: PaymentModalPr
                 <Label htmlFor="paymentMethod">Payment Method *</Label>
                 <Select
                   value={paymentDetails.paymentMethod}
-                  onValueChange={(value) => setPaymentDetails(prev => ({ ...prev, paymentMethod: value }))}
+                  onValueChange={(value) => setPaymentDetails(prev => ({ ...prev, paymentMethod: value as PaymentMethod }))}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Select payment method" />

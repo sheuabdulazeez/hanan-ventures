@@ -77,7 +77,6 @@ export default function Customers() {
                   <TableHead>Name</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Phone</TableHead>
-                  <TableHead>Address</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -85,9 +84,8 @@ export default function Customers() {
               {filteredCustomers.map((customer) => (
                 <TableRow key={customer.id}>
                   <TableCell>{customer.name}</TableCell>
-                  <TableCell>{customer.email}</TableCell>
-                  <TableCell>{customer.phone}</TableCell>
-                  <TableCell>{customer.address}</TableCell>
+                  <TableCell>{customer.email || "N/A"}</TableCell>
+                  <TableCell>{customer.phone || "N/A"}</TableCell>
                   <TableCell>
                     <Button 
                       variant="outline" 

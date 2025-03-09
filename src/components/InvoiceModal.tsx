@@ -14,8 +14,8 @@ import { useRef } from "react";
 interface InvoiceModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  sale: TSale;
-  items: TSaleItem[];
+  sale: Omit<TSale, 'updated_at' | 'sale_date' | 'customer_id'>;
+  items: Pick<TSaleItem, 'product_name' | 'quantity' | 'unit_price' | 'total_price'>[];
 }
 
 export function InvoiceModal({
@@ -31,54 +31,32 @@ export function InvoiceModal({
     if (!content) return;
 
     // try {
-    const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <style>
-              body { font-family: system-ui, sans-serif; padding: 2rem; }
-              .text-center { text-align: center; }
-              .text-right { text-align: right; }
-              .mb-6 { margin-bottom: 1.5rem; }
-              .py-2 { padding: 0.5rem 0; }
-              .border-b { border-bottom: 1px solid #e5e7eb; }
-              .border-t { border-top: 1px solid #e5e7eb; }
-              .font-bold { font-weight: bold; }
-              table { width: 100%; border-collapse: collapse; }
-              th, td { padding: 0.5rem; }
-              @media print {
-                @page { margin: 0.5cm; }
-                body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-                #print-button { display: none; }
-              }
-              #print-button {
-                position: fixed;
-                top: 20px;
-                right: 20px;
-                padding: 8px 16px;
-                background: #0284c7;
-                color: white;
-                border: none;
-                border-radius: 4px;
-                cursor: pointer;
-              }
-              #print-button:hover {
-                background: #0369a1;
-              }
-            </style>
-          </head>
-          <body>
-            <button id="print-button" onclick="window.print()">Print Invoice</button>
-            ${content.innerHTML}
-            <script>
-              document.getElementById('print-button').focus();
-            </script>
-          </body>
-        </html>
-      `;
-    const url =
-      "data:text/html;base64," +
-      encodeURIComponent(Buffer.from(htmlContent).toString("base64"));
+      const htmlContent = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <style>
+            body { font-family: system-ui, sans-serif; padding: 2rem; }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .mb-6 { margin-bottom: 1.5rem; }
+            .py-2 { padding: 0.5rem 0; }
+            .border-b { border-bottom: 1px solid #e5e7eb; }
+            .border-t { border-top: 1px solid #e5e7eb; }
+            .font-bold { font-weight: bold; }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 0.5rem; }
+            @media print {
+              @page { margin: 0.5cm; }
+              body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+            }
+          </style>
+        </head>
+        <body>
+          ${content.innerHTML}
+        </body>
+      </html>
+    `;
 
      printWindow.current = new WebviewWindow("print", {
       url: "/print.html",
@@ -100,39 +78,6 @@ export function InvoiceModal({
 
   };
 
-  const emitPrint = () => {
-    const content = document.getElementById("invoice-content");
-    if (!content) return;
-    const htmlContent = `
-        <!DOCTYPE html>
-        <html>
-          <head>
-            <style>
-              body { font-family: system-ui, sans-serif; padding: 2rem; }
-              .text-center { text-align: center; }
-              .text-right { text-align: right; }
-              .mb-6 { margin-bottom: 1.5rem; }
-              .py-2 { padding: 0.5rem 0; }
-              .border-b { border-bottom: 1px solid #e5e7eb; }
-              .border-t { border-top: 1px solid #e5e7eb; }
-              .font-bold { font-weight: bold; }
-              table { width: 100%; border-collapse: collapse; }
-              th, td { padding: 0.5rem; }
-              @media print {
-                @page { margin: 0.5cm; }
-                body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-              }
-            </style>
-          </head>
-          <body>
-            ${content.innerHTML}
-          </body>
-        </html>
-      `;
-       printWindow.current.emit("print-content", {
-        html: htmlContent,
-      });
-  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -141,10 +86,6 @@ export function InvoiceModal({
           <Button onClick={handlePrint}>
             <Printer className="mr-2 h-4 w-4" />
             Print Invoice
-          </Button>
-
-          <Button onClick={() => emitPrint()}>
-            Emit
           </Button>
         </div>
 
@@ -181,8 +122,8 @@ export function InvoiceModal({
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
-                <tr key={item.id} className="border-b">
+              {items.map((item, _) => (
+                <tr key={_} className="border-b">
                   <td className="py-2">{item.product_name}</td>
                   <td className="text-right py-2">{item.quantity}</td>
                   <td className="text-right py-2">
