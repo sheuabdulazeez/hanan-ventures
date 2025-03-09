@@ -25,7 +25,7 @@ return `
     body { font-family: system-ui, sans-serif; font-size: 12px;
       line-height: 24px; margin: 0;  padding: 0;
       }
-    .container { padding: 1.5rem; margin: 0 auto;  font-size: 0.875rem; }
+    .container { padding: 1.5rem; margin: 24px auto;  font-size: 0.875rem; }
     .text-center { text-align: center; }
     .text-right { text-align: right; }
     .text-left { text-align: left; }
@@ -35,9 +35,9 @@ return `
     .text-xs { font-size: 0.75rem; }
     .font-bold { font-weight: bold; }
     .uppercase { text-transform: uppercase; }
-    .border-b { border-bottom: 1px solid #e5e7eb; }
-    .border-y { border-top: 1px solid #e5e7eb; border-bottom: 1px solid #e5e7eb; }
-    .border-t { border-top: 1px solid #e5e7eb; }
+    .border-b { border-bottom: 1px solid #000000; }
+    .border-y { border-top: 1px solid #000000; border-bottom: 1px solid #000000; }
+    .border-t { border-top: 1px solid #000000; }
     .border-black; { border-color: black; }
     .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
     .pt-2 { padding-top: 0.5rem; }

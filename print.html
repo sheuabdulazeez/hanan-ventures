@@ -30,7 +30,14 @@
 <body>
     <div id="print-content"></div>
 
+    
     <script>
+        window.matchMedia('print').addListener(function(mql) {
+            if (!mql.matches) {
+                window.__TAURI__.event.emit("close")
+            }
+        });
+
         window.onload = () => {
             const { listen, emit } = window.__TAURI__.event
 
@@ -39,11 +46,7 @@
                 window.print();
             });
             emit("loaded")
-            window.matchMedia('print').addListener(function(mql) {
-                if (!mql.matches) {
-                    emit("close")
-                }
-            });
+            
         }
     </script>
 </body>
