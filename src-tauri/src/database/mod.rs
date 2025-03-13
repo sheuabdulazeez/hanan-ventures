@@ -1,7 +1,7 @@
-use sqlx::migrate::{MigrateDatabase, Migrator};
+use sqlx::migrate::MigrateDatabase;
 use sqlx::{sqlite::SqlitePool, Sqlite, Transaction, Row, Column};
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -34,20 +34,13 @@ pub struct FetchOneResult {
 
 impl DatabaseConnection {
     pub async fn new(db_path: PathBuf) -> Self {
-        let database_url = format!("sqlite:{}", db_path.display());
-
-        // if !db_path.exists() {
-        //     std::fs::File::create(db_path)
-        //        .expect("Failed to create database file");
-        // }
-
-        
-        if !<Sqlite as MigrateDatabase>::database_exists(&database_url).await.unwrap_or(false) {
-            <Sqlite as MigrateDatabase>::create_database(&database_url).await.unwrap();
+        let dbfile = db_path.display().to_string();
+        if !<Sqlite as MigrateDatabase>::database_exists(&dbfile).await.unwrap_or(false) {
+            <Sqlite as MigrateDatabase>::create_database(&dbfile).await.unwrap();
         };
         
         
-        let pool = SqlitePool::connect(&database_url).await.expect("Failed to initialize database");
+        let pool = SqlitePool::connect(&dbfile).await.expect("Failed to initialize database");
         let db = Self {
             pool: Arc::new(pool),
             transactions: Arc::new(Mutex::new(HashMap::new()))
@@ -59,8 +52,7 @@ impl DatabaseConnection {
 
     pub async fn migrate(&self) {
        // Ensure migrations are embedded at compile time
-       let m = Migrator::new(Path::new("./src/database/migrations")).await
-       .expect("Failed to initialize migrator");
+       let m = sqlx::migrate!("src/database/migrations");
        
         // Run migrations with detailed error handling
         match m.run(&*self.pool).await {
