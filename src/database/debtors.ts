@@ -39,30 +39,29 @@ export async function recordDebtPayment(payment: Omit<TDebtorPayment, "id" | "cr
     const db = await initDatabase();
     
     try {
-        await db.execute('BEGIN TRANSACTION');
+        const { amount_owed } = await db.selectOne<{ amount_owed: number }>(
+            'SELECT amount_owed FROM debtors WHERE id = $1',
+            [payment.debtor_id]
+        );
 
+        await db.beginTransaction()
         // Record the payment
-        const { lastInsertId: paymentId } = await db.execute(
+        const { lastInsertId: paymentId } = await db.executeQuery(
             'INSERT INTO debtor_payments (debtor_id, payment_date, payment_method, bank_name, amount_paid, employee_id) VALUES ($1, $2, $3, $4, $5, $6)',
             [payment.debtor_id, payment.payment_date, payment.payment_method, payment.bank_name, payment.amount_paid, payment.employee_id]
         );
 
         // Update debtor record
-        const [{ amount_owed }] = await db.select<{ amount_owed: number }[]>(
-            'SELECT amount_owed FROM debtors WHERE id = $1',
-            [payment.debtor_id]
-        );
-
         const remaining = amount_owed - payment.amount_paid;
-        await db.execute(
+        await db.executeQuery(
             'UPDATE debtors SET amount_owed = $1, is_paid = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3',
             [remaining, remaining <= 0 ? 1 : 0, payment.debtor_id]
         );
 
-        await db.execute('COMMIT');
+        await db.commit();
         return paymentId;
     } catch (error) {
-        await db.execute('ROLLBACK');
+        await db.rollback();
         throw error;
     }
 }
@@ -107,7 +106,7 @@ export async function handleSaleDebt(
 
         if (amountOwed > 0) {
             // Check if customer already has debt
-            const [existingDebtor] = await db.select<TDebtor[]>(
+            const existingDebtor = await db.selectOne<TDebtor>(
                 'SELECT * FROM debtors WHERE customer_id = $1 AND is_paid = 0',
                 [customerId]
             );
@@ -175,6 +174,7 @@ export async function getCustomerDebtHistory(customerId: string) {
         GROUP BY d.id
         ORDER BY d.created_at DESC
     `, [customerId]);
+
 
     // Parse the JSON string into actual arrays
     return result.map(debt => ({

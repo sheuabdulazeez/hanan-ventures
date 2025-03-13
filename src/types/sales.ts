@@ -9,6 +9,7 @@ export type SALE_SaleItem = Partial<TSaleItem> & {
     id?: string;
     customer: Partial<TCustomer>;
     items: SALE_SaleItem[];
+    discount: number;
     total: number;
     date: Date;
     paymentMethod?: PaymentMethod;

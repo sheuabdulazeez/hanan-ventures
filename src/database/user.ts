@@ -20,7 +20,7 @@ export async function create(user: Omit<TUser, "id" | "created_at" | "updated_at
     const db = await initDatabase();
 
     // Check if the super user already exists
-    const [superUser] = await db.select<TUser[]>('SELECT * FROM users WHERE username = $1', ["admin"]);
+    const superUser = await db.selectOne<TUser>('SELECT * FROM users WHERE username = $1', ["admin"]);
     if(superUser) return;
     try {
         const password = await bcrypt.hash("admin123", 10);
@@ -32,7 +32,7 @@ export async function create(user: Omit<TUser, "id" | "created_at" | "updated_at
 
 export async function login(username: string, password: string): Promise<TUser | {error: string}>{
     const db = await initDatabase();
-    const [user] = await db.select<TUser[]>('SELECT * FROM users WHERE username = $1', [username]);
+    const user = await db.selectOne<TUser>('SELECT * FROM users WHERE username = $1', [username]);
     if(!user) return {error: "User not found"};
     const isValid = await bcrypt.compare(password, user.password);
     if(!isValid) return {error: "Invalid password"};

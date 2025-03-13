@@ -30,14 +30,14 @@
 
     
     <script>
-        window.matchMedia('print').addListener(function(mql) {
-            if (!mql.matches) {
-                window.__TAURI__.event.emit("close")
-            }
-        });
-
         window.onload = () => {
             const { listen, emit } = window.__TAURI__.event
+
+            window.matchMedia('print').addListener(function(mql) {
+                if (!mql.matches) {
+                    window.__TAURI__.event.emit("close")
+                }
+            });
 
             listen('print-content', ({payload}) => {
                 document.getElementById('print-content').innerHTML = payload.html;

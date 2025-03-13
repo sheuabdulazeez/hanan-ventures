@@ -45,10 +45,11 @@ export function PaymentModal({ isOpen, onClose, sale, onSubmit }: PaymentModalPr
   })
 
   const handleReceivedAmountChange = (value: number) => {
+    const discountedTotal = sale.total - (sale.discount || 0)
     setPaymentDetails(prev => ({
       ...prev,
       receivedAmount: value,
-      changeReturn: value - prev.payingAmount
+      changeReturn: value - discountedTotal
     }))
   }
 
@@ -56,6 +57,9 @@ export function PaymentModal({ isOpen, onClose, sale, onSubmit }: PaymentModalPr
     e.preventDefault()
     onSubmit(paymentDetails)
   }
+
+  const discountAmount = sale.discount || 0
+  const discountedTotal = sale.total - discountAmount
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -83,7 +87,7 @@ export function PaymentModal({ isOpen, onClose, sale, onSubmit }: PaymentModalPr
                   id="payingAmount"
                   type="number"
                   step="0.01"
-                  value={paymentDetails.payingAmount}
+                  value={discountedTotal}
                   readOnly
                 />
               </div>
@@ -135,12 +139,16 @@ export function PaymentModal({ isOpen, onClose, sale, onSubmit }: PaymentModalPr
                   <span>{sale.items.length}</span>
                 </div>
                 <div className="flex justify-between">
+                  <span>Subtotal</span>
+                  <span>₦{sale.total.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
                   <span>Discount</span>
-                  <span>₦0.00</span>
+                  <span>₦{discountAmount.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between font-bold">
                   <span>Total Payable</span>
-                  <span>₦{sale.total.toFixed(2)}</span>
+                  <span>₦{discountedTotal.toFixed(2)}</span>
                 </div>
               </div>
               <div>
@@ -171,4 +179,3 @@ export function PaymentModal({ isOpen, onClose, sale, onSubmit }: PaymentModalPr
     </Dialog>
   )
 }
-

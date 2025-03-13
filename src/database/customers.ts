@@ -9,7 +9,7 @@ export async function getCustomers() {
 
 export async function getCustomerById(id: string) {
     const db = await initDatabase();
-    const [customer] = await db.select<TCustomer[]>('SELECT * FROM customers WHERE id = $1', [id]);
+    const customer = await db.selectOne<TCustomer>('SELECT * FROM customers WHERE id = $1', [id]);
     return customer;
 }
 
@@ -48,9 +48,9 @@ export async function ensureWalkInCustomer() {
   const db = await initDatabase();
   
   // Check if walk-in customer exists
-  const walkIn = await db.select<TCustomer[]>('SELECT * FROM customers WHERE id = $1', ["WALK-IN"]);
+  const walkIn = await db.selectOne<TCustomer>('SELECT * FROM customers WHERE id = $1', ["WALK-IN"]);
   
-  if (walkIn.length === 0) {
+  if (!walkIn?.id) {
     // Create walk-in customer if it doesn't exist
     await db.execute(`
       INSERT INTO customers (id, name, phone, email, address)

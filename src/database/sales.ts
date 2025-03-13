@@ -1,9 +1,9 @@
 import { TSale, TSaleItem } from "@/types/database";
-import { initDatabase } from ".";
+import { Database } from ".";
 import { handleSaleDebt } from "./debtors";
 
 export async function getSales() {
-    const db = await initDatabase();
+    const db = new Database();
     const result = await db.select<TSale[]>(`
         SELECT s.*, c.name as customer_name, u.name as employee_name 
         FROM sales s 
@@ -15,8 +15,8 @@ export async function getSales() {
 }
 
 export async function getSaleById(id: string) {
-    const db = await initDatabase();
-    const [sale] = await db.select<TSale[]>(`
+    const db = new Database();
+    const sale = await db.selectOne<TSale>(`
         SELECT s.*, c.name as customer_name, u.name as employee_name 
         FROM sales s 
         LEFT JOIN customers c ON s.customer_id = c.id
@@ -27,7 +27,7 @@ export async function getSaleById(id: string) {
 }
 
 export async function getSaleItems(saleId: string) {
-    const db = await initDatabase();
+    const db = new Database();
     const items = await db.select<TSaleItem[]>(`
         SELECT si.*, p.name as product_name
         FROM sale_items si
@@ -38,40 +38,39 @@ export async function getSaleItems(saleId: string) {
 }
 
 export async function createSale(sale: Omit<TSale, "id" | "created_at" | "updated_at">, items: Omit<TSaleItem, "id" | "created_at" | "updated_at"|'sale_id'>[]) {
-    const db = await initDatabase();
-    
+    const db = new Database();
     try {
+        const { saleId } = await db.selectOne<{ saleId: string }>(
+            `SELECT lower(hex(randomblob(16))) as saleId`
+        );
         // Generate sale ID
-        const [{ id: saleId }] = await db.select<[{ id: string }]>('SELECT lower(hex(randomblob(16))) as id');
-        
-        // Build all queries as a single transaction
-        let queries = ['BEGIN TRANSACTION;'];
-        
-        
-        // Add sale record query
-        queries.push(`
-            INSERT INTO sales (id, customer_id, employee_id, total_amount, discount, payment_method, bank_name) 
-            VALUES ('${saleId}', '${sale.customer_id}', '${sale.employee_id}', ${sale.total_amount}, ${sale.discount}, '${sale.payment_method}', '${sale.bank_name ?? "Opay"}');
-        `);
+        await db.beginTransaction();
+        // // Add sale record
 
-        // Add sale items and update stock queries
+        await db.executeQuery(
+            `INSERT INTO sales (id, customer_id, employee_id, total_amount, discount, payment_method, bank_name, amount_paid) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+            [saleId, sale.customer_id, sale.employee_id, sale.total_amount, sale.discount, sale.payment_method, sale.bank_name||"", sale.amount_paid]
+        );
+        
+        // // Add sale items and update stock
         for (const item of items) {
-            queries.push(`
-                INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, total_price) 
-                VALUES ('${saleId}', '${item.product_id}', ${item.quantity}, ${item.unit_price}, ${item.total_price});
-            `);
+            await db.executeQuery(
+                `INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, total_price) 
+                 VALUES ($1, $2, $3, $4, $5)`,
+                [saleId, item.product_id, item.quantity, item.unit_price, item.total_price]
+            );
             
-            queries.push(`
-                UPDATE products 
-                SET quantity_on_hand = quantity_on_hand - ${item.quantity} 
-                WHERE id = '${item.product_id}';
-            `);
+            await db.executeQuery(
+                `UPDATE products 
+                 SET quantity_on_hand = quantity_on_hand - $1 
+                 WHERE id = $2`,
+                [item.quantity, item.product_id]
+            );
         }
 
-        queries.push('COMMIT;');
-
-        // Execute all queries in one go
-        await db.execute(queries.join('\n'));
+        // Commit the transaction
+        await db.commit();
         
         // Handle debt if partial payment
         if (sale.amount_paid < sale.total_amount) {
@@ -80,20 +79,20 @@ export async function createSale(sale: Omit<TSale, "id" | "created_at" | "update
                 sale.customer_id,
                 sale.total_amount,
                 sale.amount_paid,
-                new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) // Default due date: 1 week
+                new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
             );
         }
 
         return saleId;
     } catch (error) {
-        console.error('Sale creation error:', error);
-        await db.execute('ROLLBACK;');
+        console.log(error)
+        await db.rollback();
         throw error;
     }
 }
 
 export async function getDailySales(date: Date) {
-    const db = await initDatabase();
+    const db = new Database();
     const startOfDay = new Date(date);
     startOfDay.setHours(0, 0, 0, 0);
     
@@ -109,7 +108,7 @@ export async function getDailySales(date: Date) {
 }
 
 export async function getSalesByDateRange(startDate: Date, endDate: Date) {
-    const db = await initDatabase();
+    const db = new Database();
     const result = await db.select<TSale[]>(`
         SELECT s.*, c.name as customer_name, u.name as employee_name 
         FROM sales s 
@@ -123,7 +122,7 @@ export async function getSalesByDateRange(startDate: Date, endDate: Date) {
 }
 
 export async function getSalesByCashier(startDate: Date, endDate: Date) {
-    const db = await initDatabase();
+    const db = new Database();
     const result = await db.select<{ employee_name: string, total: number }[]>(`
         SELECT u.name as employee_name, COALESCE(SUM(s.total_amount), 0) as total
         FROM users u
