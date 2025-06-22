@@ -1,15 +1,11 @@
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { TSale, TSaleItem } from "@/types/database";
-import { format } from "date-fns";
 import { Printer } from "lucide-react";
-import { invoke } from "@tauri-apps/api/core";
-import { Webview } from "@tauri-apps/api/webview";
-import { Buffer } from "buffer";
 import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { Window } from "@tauri-apps/api/window";
 import { useRef } from "react";
 import { invoiceHtml } from "@/lib/utils";
+import { ScrollArea } from "./ui/scroll-area";
 
 
 interface InvoiceModalProps {
@@ -57,15 +53,16 @@ export function InvoiceModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[600px]">
-        <div className="flex justify-end mb-4">
-          <Button onClick={handlePrint}>
-            <Printer className="mr-2 h-4 w-4" />
-            Print Invoice
-          </Button>
-        </div>
-
-        <div className="p-6" id="invoice-content" dangerouslySetInnerHTML={{__html: invoiceHtml(sale, items)}} />
+      <DialogContent className="max-w-[600px] max-h-screen">
+        <ScrollArea className="h-[90vh]">
+          <div className="p-6" id="invoice-content" dangerouslySetInnerHTML={{__html: invoiceHtml(sale, items)}} />
+          <div className="flex justify-end pb-4">
+            <Button onClick={handlePrint}>
+              <Printer className="mr-2 h-4 w-4" />
+              Print Invoice
+            </Button>
+          </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );

@@ -8,20 +8,50 @@
     <style>
         @media print {
             @page {
-                size: 72mm 297mm;
+                font-family: system-ui, sans-serif;
+                font-style: normal;
                 margin: 0;
+                padding: 0;
+                size: 80mm 297mm;
             }
             
             body {
                 font-size: 12px;
                 line-height: 24px;
+                font-family: system-ui, sans-serif;
+                font-optical-sizing: auto;
+                font-style: normal;
+                font-variation-settings: "wdth" 100;
+                width: 100%;
+                height: 100%;
+                margin: 0;
+                padding: 0;
             }
 
             #print-content {
                 width: 100%;
-                padding: 5mm;
+                height: auto;
+                padding: 2mm;
                 box-sizing: border-box;
+                margin-bottom: 12px;
             }
+    .text-center { text-align: center; }
+    .text-right { text-align: right; }
+    .text-left { text-align: left; }
+    .space-y-1 > * + * { margin-top: 0.25rem; }
+    .space-y-4 > * + * { margin-top: 1rem; }
+    .text-xl { font-size: 1.15rem; }
+    .text-xs { font-size: 0.75rem; }
+    .font-bold { font-weight: bold; }
+    .uppercase { text-transform: uppercase; }
+    .border-b { border-bottom: 1px solid #000000; }
+    .border-y { border-top: 1px solid #000000; border-bottom: 1px solid #000000; }
+    .border-t { border-top: 1px solid #000000; }
+    .border-black { border-color: black; }
+    .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+    .pt-2 { padding-top: 0.5rem; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { padding: 0.25rem 0; }
         }
     </style>
 </head>
@@ -30,22 +60,37 @@
 
     
     <script>
-        window.onload = () => {
-            const { listen, emit } = window.__TAURI__.event
+        function waitForTauri() {
+            return new Promise((resolve) => {
+                const checkTauri = () => {
+                    if (window.__TAURI__) {
+                        resolve(window.__TAURI__);
+                    } else {
+                        setTimeout(checkTauri, 50);
+                    }
+                };
+                checkTauri();
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const tauri = await waitForTauri();
+            const { listen, emit } = tauri.event;
 
             window.matchMedia('print').addListener(function(mql) {
                 if (!mql.matches) {
-                    window.__TAURI__.event.emit("close")
+                    emit("close");
                 }
             });
 
-            listen('print-content', ({payload}) => {
-                document.getElementById('print-content').innerHTML = payload.html;
+            listen('print-content', (event) => {
+                document.getElementById('print-content').innerHTML = event.payload.html;
                 window.print();
             });
-            emit("loaded")
             
-        }
+            emit("loaded");
+        });
     </script>
+
 </body>
 </html>

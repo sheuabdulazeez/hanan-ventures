@@ -195,8 +195,8 @@ export default function DebtorsPage() {
   };
 
   const getRiskLevel = (amount: number) => {
-    if (amount < 500) return "Low";
-    if (amount < 1000) return "Medium";
+    if (amount < 10000) return "Low";
+    if (amount < 50000) return "Medium";
     return "High";
   };
 

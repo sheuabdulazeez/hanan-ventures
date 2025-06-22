@@ -2,7 +2,6 @@ import { useState, useEffect } from "react";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "../../components/ui/card";
@@ -22,10 +21,9 @@ import {
 } from "../../components/ui/tabs";
 import {
   ChartContainer,
-  ChartTooltip,
   ChartTooltipContent,
 } from "../../components/ui/chart";
-import { format, startOfWeek, endOfWeek } from "date-fns";
+import { format } from "date-fns";
 import {
   Bar,
   BarChart,
@@ -39,8 +37,7 @@ import {
   YAxis,
   Tooltip,
   Legend,
-} from "recharts";
-import { salesByCashier, todaySalesByCashier } from "@/lib/mock-dashboard-data";
+} from "recharts/es6";
 import { motion } from "framer-motion";
 import { useAnimatedValue } from "@/hooks/useAnimatedValue";
 import { animated } from "@react-spring/web";
@@ -60,6 +57,8 @@ import {
   SalesByCashier,
 } from "@/database/dashboard";
 import { getDebtors } from "@/database/debtors";
+import { useAppStore } from "@/lib/store";
+import { UserRole } from "@/types/database";
 
 const COLORS = [
   "#0088FE",
@@ -72,6 +71,9 @@ const COLORS = [
 ];
 
 export default function DashboardPage() {
+  const { auth: { user } } = useAppStore();
+  const isAdmin = user?.role === 'admin' || user?.role === 'manager';
+
   const [activeTab, setActiveTab] = useState("daily");
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [dailySales, setDailySales] = useState<DailySales[]>([]);
@@ -83,8 +85,10 @@ export default function DashboardPage() {
   const [recentSales, setRecentSales] = useState<RecentSale[]>([]);
   const [debtorsList, setDebtorsList] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+
   useEffect(() => {
     const fetchDashboardData = async () => {
+      const cashierId = user?.role === UserRole.cashier ? user.id : undefined;
       try {
         const [
           metricsData,
@@ -95,12 +99,12 @@ export default function DashboardPage() {
           recentSalesData,
           debtorsData,
         ] = await Promise.all([
-          getDashboardMetrics(),
-          getDailySales(),
-          getWeeklySales(),
+          getDashboardMetrics(cashierId),
+          getDailySales(cashierId),
+          getWeeklySales(cashierId),
           getMonthlySalesByCashier(),
           getTopCustomers(),
-          getRecentSales(),
+          getRecentSales(10, cashierId),
           getDebtors(),
         ]);
 
@@ -130,6 +134,7 @@ export default function DashboardPage() {
     totalProducts: metrics.totalProducts,
     averageOrderValue: metrics.averageOrderValue,
     totalExpenses: metrics.totalExpenses,
+    totalDebtToCollect: metrics.totalDebt,
   };
 
   // Update the JSX where data is used
@@ -141,54 +146,97 @@ export default function DashboardPage() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        Dashboard
+        {isAdmin ? "Dashboard" : "My Dashboard"}
       </motion.h1>
 
       {/* Overview Cards */}
       <div className="grid gap-3 grid-cols-1  sm:grid-cols-2 md:grid-cols-3  sm:gap-4">
-        {Object.entries(overviewData).map(([key, value], index) => (
-          <motion.div
-            key={key}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5, delay: index * 0.1 }}
-          >
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium capitalize">
-                  {key.replace(/([A-Z])/g, " $1").trim()}
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <AnimatedValue
-                  value={value}
-                  prefix={
-                    typeof value === "number" &&
-                    !["totalCustomers", "totalProducts"].includes(key)
-                      ? "₦"
-                      : ""
-                  }
-                />
-              </CardContent>
-            </Card>
-          </motion.div>
-        ))}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5, delay: 0.5 }}
-        >
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">
-                Total Debt to Collect
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <AnimatedValue value={metrics.totalDebt} prefix="₦" />
-            </CardContent>
-          </Card>
-        </motion.div>
+        {
+          isAdmin ? 
+          Object.entries(overviewData).map(([key, value], index) => (
+            <motion.div
+              key={key}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: index * 0.1 }}
+            >
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium capitalize">
+                    {key.replace(/([A-Z])/g, " $1").trim()}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <AnimatedValue
+                    value={value}
+                    prefix={
+                      typeof value === "number" &&
+                      !["totalCustomers", "totalProducts"].includes(key)
+                        ? "₦"
+                        : ""
+                    }
+                  />
+                </CardContent>
+              </Card>
+            </motion.div>
+          )) : 
+          (
+            <>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">My Sales Today</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <AnimatedValue 
+                    value={dailySales.find(sale => sale.date === format(new Date(), 'yyyy-MM-dd'))?.amount || 0} 
+                    prefix="₦" 
+                  />
+                </CardContent>
+              </Card>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.1 }}
+            >
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">My Sales This Month</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <AnimatedValue 
+                    value={dailySales.reduce((total, cashier) => total + cashier.amount, 0)} 
+                    prefix="₦" 
+                  />
+                </CardContent>
+              </Card>
+            </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5, delay: 0.2 }}
+            >
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Sales Count</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <AnimatedValue 
+                    value={metrics.totalSales}
+                    prefix="₦" 
+                  />
+                </CardContent>
+              </Card>
+            </motion.div>
+          </>
+          )
+        
+        }
       </div>
 
       {/* Charts Section */}
@@ -263,121 +311,125 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      {/* Today's Sales and Debtors */}
-      <div className="grid gap-3 grid-cols-1 md:grid-cols-2 mt-3 sm:gap-4 sm:mt-4">
-        <Card>
-          <CardHeader className="flex justify-between items-center">
-            <CardTitle className="text-base sm:text-lg">
-              Monthly Sales by Cashier
-            </CardTitle>
-            <Link
-              to="/dashboard/sales"
-              className="text-xs sm:text-sm text-blue-500 hover:underline"
-            >
-              View All
-            </Link>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
-              <div className="overflow-x-auto">
+      {/* Monthly Sales and Debtors */}
+      {
+        isAdmin && (
+          <div className="grid gap-3 grid-cols-1 md:grid-cols-2 mt-3 sm:gap-4 sm:mt-4">
+            <Card>
+              <CardHeader className="flex justify-between items-center">
+                <CardTitle className="text-base sm:text-lg">
+                  Monthly Sales by Cashier
+                </CardTitle>
+                <Link
+                  to="/dashboard/sales"
+                  className="text-xs sm:text-sm text-blue-500 hover:underline"
+                >
+                  View All
+                </Link>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                  <div className="overflow-x-auto">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Cashier</TableHead>
+                          <TableHead>Amount</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {monthlySalesByCashier.map((cashier) => (
+                          <TableRow key={cashier.name}>
+                            <TableCell>{cashier.name}</TableCell>
+                            <TableCell>₦{cashier.amount.toFixed(2)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                  <div className="flex justify-center h-[300px]">
+                    <ChartContainer
+                      config={{
+                        sales: {
+                          label: "Sales",
+                          color: "hsl(var(--chart-4))",
+                        },
+                      }}
+                      className="w-full max-w-[550px]"
+                    >
+                      <ResponsiveContainer>
+                        <PieChart
+                          margin={{ top: 20, right: 0, bottom: 20, left: 0 }}
+                        >
+                          <Pie
+                            data={monthlySalesByCashier}
+                            dataKey="amount"
+                            nameKey="name"
+                            cx="60%"
+                            cy="40%"
+                            outerRadius={100}
+                            label
+                          >
+                            {monthlySalesByCashier.map((entry, index) => (
+                              <Cell
+                                key={`cell-${index}`}
+                                fill={COLORS[index % COLORS.length]}
+                              />
+                            ))}
+                          </Pie>
+                          <Tooltip content={<ChartTooltipContent />} />
+                          <Legend />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </ChartContainer>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex justify-between items-center">
+                <CardTitle>Debtors</CardTitle>
+                <Link
+                  to="/dashboard/debtors"
+                  className="text-sm text-blue-500 hover:underline"
+                >
+                  View All
+                </Link>
+              </CardHeader>
+              <CardContent>
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Cashier</TableHead>
+                      <TableHead>Name</TableHead>
                       <TableHead>Amount</TableHead>
+                      <TableHead>Due Date</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {monthlySalesByCashier.map((cashier) => (
-                      <TableRow key={cashier.name}>
-                        <TableCell>{cashier.name}</TableCell>
-                        <TableCell>₦{cashier.amount.toFixed(2)}</TableCell>
+                    {debtorsList.length ? (
+                      debtorsList.map((debtor) => (
+                        <TableRow key={debtor.id}>
+                          <TableCell>{debtor.customer_name}</TableCell>
+                          <TableCell>₦{debtor.amount_owed.toFixed(2)}</TableCell>
+                          <TableCell>
+                            {format(debtor.due_date, "MMM dd, yyyy")}
+                          </TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center">
+                          No debtors found
+                        </TableCell>
                       </TableRow>
-                    ))}
+                    )}
                   </TableBody>
                 </Table>
-              </div>
-              <div className="flex justify-center h-[300px]">
-                <ChartContainer
-                  config={{
-                    sales: {
-                      label: "Sales",
-                      color: "hsl(var(--chart-4))",
-                    },
-                  }}
-                  className="w-full max-w-[500px]"
-                >
-                  <ResponsiveContainer>
-                    <PieChart
-                      margin={{ top: 20, right: 20, bottom: 20, left: 20 }}
-                    >
-                      <Pie
-                        data={monthlySalesByCashier}
-                        dataKey="amount"
-                        nameKey="name"
-                        cx="50%"
-                        cy="50%"
-                        outerRadius={100}
-                        label
-                      >
-                        {monthlySalesByCashier.map((entry, index) => (
-                          <Cell
-                            key={`cell-${index}`}
-                            fill={COLORS[index % COLORS.length]}
-                          />
-                        ))}
-                      </Pie>
-                      <Tooltip content={<ChartTooltipContent />} />
-                      <Legend />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </ChartContainer>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex justify-between items-center">
-            <CardTitle>Debtors</CardTitle>
-            <Link
-              to="/dashboard/debtors"
-              className="text-sm text-blue-500 hover:underline"
-            >
-              View All
-            </Link>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Amount</TableHead>
-                  <TableHead>Due Date</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {debtorsList.length ? (
-                  debtorsList.map((debtor) => (
-                    <TableRow key={debtor.id}>
-                      <TableCell>{debtor.customer_name}</TableCell>
-                      <TableCell>₦{debtor.amount_owed.toFixed(2)}</TableCell>
-                      <TableCell>
-                        {format(debtor.due_date, "MMM dd, yyyy")}
-                      </TableCell>
-                    </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell colSpan={3} className="text-center">
-                      No debtors found
-                    </TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      </div>
+              </CardContent>
+            </Card>
+          </div>
+        )
+      }
 
       {/* Recent Sales and Top Customers */}
       <div className="grid gap-3 grid-cols-1 md:grid-cols-2 mt-3 sm:gap-4 sm:mt-4">

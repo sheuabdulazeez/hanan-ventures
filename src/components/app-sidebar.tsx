@@ -30,6 +30,7 @@ import {
 } from "./ui/dropdown-menu";
 import { Button } from "./ui/button";
 import { Link } from "react-router";
+import { useAppStore } from "@/lib/store";
 
 // This is sample data.
 const data = {
@@ -68,7 +69,7 @@ const data = {
       title: "Admin",
       url: "#",
       icon: Bot,
-      role: ["admin"],
+      role: ["admin", "manager"],
       items: [
         {
           title: "Suppliers",
@@ -92,66 +93,61 @@ const data = {
         },
       ],
     },
-  ]
+  ],
 };
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
+  const {
+    auth: { user },
+  } = useAppStore();
+  const isAdmin = user?.role === "admin" || user?.role === "manager";
   return (
-    <Sidebar collapsible="icon" {...props} >
+    <Sidebar collapsible="icon" {...props}>
       <SidebarHeader>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-                <div className="cursor-pointer">
-                  <div className="flex h-10 w-10 items-center justify-center rounded bg-gradient-to-br from-purple-700 to-indigo-800">
-                    <AudioWaveform className="h-5 w-5 text-white" />
-                  </div>
-
-                  <div className="flex flex-col gap-0.5 leading-none">
-                    <span className="font-bold text-md">Hanan Ventures</span>
-                    <span className="">Enterprise</span>
-                  </div>
-                  
+              <div className="cursor-pointer">
+                <div className="flex h-10 w-10 items-center justify-center rounded bg-gradient-to-br from-purple-700 to-indigo-800">
+                  <AudioWaveform className="h-5 w-5 text-white" />
                 </div>
+
+                <div className="flex flex-col gap-0.5 leading-none">
+                  <span className="font-bold text-md">Hanan Ventures</span>
+                  <span className="">Enterprise</span>
+                </div>
+              </div>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button className="w-full rounded bg-gradient-to-t from-purple-700 to-indigo-800">
-                      <Plus className="mr-2 h-4 w-4" /> Add New
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent className="w-56">
-                    <DropdownMenuItem>
-                      <Link
-                        to="/dashboard/sales/create"
-                        className="flex w-full"
-                      >
-                        Sale
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
-                      <Link
-                        to="/dashboard/customers/create"
-                        className="flex w-full"
-                      >
-                        Customer
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem>
-                      <Link
-                        to="/dashboard/stocks/create"
-                        className="flex w-full"
-                      >
-                        Stock
-                      </Link>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="w-full rounded bg-gradient-to-t from-purple-700 to-indigo-800">
+                <Plus className="mr-2 h-4 w-4" /> Add New
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent className="w-56">
+              <DropdownMenuItem>
+                <Link to="/dashboard/sales/create" className="flex w-full">
+                  Sale
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <Link to="/dashboard/customers/create" className="flex w-full">
+                  Customer
+                </Link>
+              </DropdownMenuItem>
+              {isAdmin && (
+                <DropdownMenuItem>
+                  <Link to="/dashboard/stocks/create" className="flex w-full">
+                    Stock
+                  </Link>
+                </DropdownMenuItem>
+              )}
+            </DropdownMenuContent>
+          </DropdownMenu>
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        
         <NavMain items={data.navMain as any} />
       </SidebarContent>
       <SidebarFooter>

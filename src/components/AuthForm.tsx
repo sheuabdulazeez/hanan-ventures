@@ -46,6 +46,10 @@ export default function AuthForm() {
           <input
             type="text"
             id="username"
+            autoCapitalize='off'
+            autoComplete='off'
+            autoCorrect='off'
+            autoFocus={true}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             className="w-full px-4 py-2 rounded-md bg-white bg-opacity-20 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 transition duration-200"
@@ -58,7 +62,7 @@ export default function AuthForm() {
             Password
           </label>
           <input
-            type="text"
+            type="password"
             id="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}

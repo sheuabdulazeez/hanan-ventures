@@ -1,10 +1,10 @@
 import { TSale, TSaleItem } from "@/types/database";
-import { clsx, type ClassValue } from "clsx"
+import { clsx, type ClassValue } from "clsx";
 import { format } from "date-fns";
-import { twMerge } from "tailwind-merge"
+import { twMerge } from "tailwind-merge";
 
 export function cn(...inputs: ClassValue[]) {
-  return twMerge(clsx(inputs))
+  return twMerge(clsx(inputs));
 }
 
 export const randomString = (length: number) => {
@@ -18,15 +18,36 @@ export const randomString = (length: number) => {
   return result.toUpperCase();
 };
 
-export const invoiceHtml = (sale: Omit<TSale, 'updated_at' | 'sale_date' | 'customer_id'>, items: Pick<TSaleItem, 'product_name' | 'quantity' | 'unit_price' | 'total_price'>[]) => {
+export const formatAmount = (amount: number) => {
+  return new Intl.NumberFormat("en-NG", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(amount);
+};
+
+export const invoiceHtml = (
+  sale: Omit<TSale, "updated_at" | "sale_date" | "customer_id">,
+  items: Pick<
+    TSaleItem,
+    "product_name" | "quantity" | "unit_price" | "total_price"
+  >[]
+) => {
+  const amountPaid = sale.payments.reduce(
+    (acc, payment) => acc + payment.amount,
+    0
+  );
   const shortInvoiceId = sale.id.slice(-8).toUpperCase();
   const totalAfterDiscount = sale.total_amount - (sale.discount || 0);
-  const change = Math.max(0, (sale.amount_paid || 0) - totalAfterDiscount);
-  const outstanding = Math.max(0, totalAfterDiscount - (sale.amount_paid || 0));
+  const change = Math.max(0, (amountPaid || 0) - totalAfterDiscount);
+  const outstanding = Math.max(0, totalAfterDiscount - (amountPaid || 0));
 
-return `
+  return `
   <style>
-    body { font-family: system-ui, sans-serif; font-size: 12px;
+    body { font-family: system-ui, sans-serif;
+                font-optical-sizing: auto;
+                font-style: normal;
+                font-variation-settings:
+                  "wdth" 100; font-size: 12px;
       line-height: 24px; margin: 0;  padding: 1rem 0;
       }
     .container { padding: 1rem; margin: 2rem auto;  font-size: 0.875rem; }
@@ -35,21 +56,21 @@ return `
     .text-left { text-align: left; }
     .space-y-1 > * + * { margin-top: 0.25rem; }
     .space-y-4 > * + * { margin-top: 1rem; }
-    .text-xl { font-size: 1.25rem; }
+    .text-xl { font-size: 1.15rem; }
     .text-xs { font-size: 0.75rem; }
     .font-bold { font-weight: bold; }
     .uppercase { text-transform: uppercase; }
     .border-b { border-bottom: 1px solid #000000; }
     .border-y { border-top: 1px solid #000000; border-bottom: 1px solid #000000; }
     .border-t { border-top: 1px solid #000000; }
-    .border-black; { border-color: black; }
+    .border-black { border-color: black; }
     .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
     .pt-2 { padding-top: 0.5rem; }
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 0.25rem 0; }
     
     @media print {
-      .container { padding: 0; }
+      .container { padding: 0; margin-bottom: 1rem; }
     }
   </style>
   <div class="container space-y-4">
@@ -88,14 +109,18 @@ return `
         </tr>
       </thead>
       <tbody>
-        ${items.map((item) => `
+        ${items
+          .map(
+            (item) => `
           <tr class="border-b">
             <td class="py-2">${item.product_name}</td>
             <td class="text-right py-2">${item.quantity}</td>
             <td class="text-right py-2">₦${item.unit_price.toFixed(2)}</td>
             <td class="text-right py-2">₦${item.total_price.toFixed(2)}</td>
           </tr>
-        `).join('')}
+        `
+          )
+          .join("")}
       </tbody>
     </table>
 
@@ -105,36 +130,57 @@ return `
           <span>Subtotal:</span>
           <span>₦${sale.total_amount.toFixed(2)}</span>
         </div>
-        ${sale.discount > 0 ? `
+        ${
+          sale.discount > 0
+            ? `
           <div style="display: flex; justify-content: space-between; padding: 0.5rem 0;">
             <span>Discount:</span>
             <span>₦${sale.discount.toFixed(2)}</span>
           </div>
-        ` : ''}
+        `
+            : ""
+        }
         <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; font-weight: bold; border-top: 1px solid #000000;">
           <span>Total:</span>
           <span>₦${totalAfterDiscount.toFixed(2)}</span>
         </div>
         <div style="display: flex; justify-content: space-between; padding: 0.5rem 0;">
           <span>Amount Paid:</span>
-          <span>₦${(sale.amount_paid || 0).toFixed(2)}</span>
+          <span>₦${(amountPaid || 0).toFixed(2)}</span>
         </div>
-        ${change > 0 ? `
+        ${
+          change > 0
+            ? `
           <div style="display: flex; justify-content: space-between; padding: 0.5rem 0;">
             <span>Change:</span>
             <span>₦${change.toFixed(2)}</span>
           </div>
-        ` : ''}
-        ${outstanding > 0 ? `
+        `
+            : ""
+        }
+        ${
+          outstanding > 0
+            ? `
           <div style="display: flex; justify-content: space-between; padding: 0.5rem 0; font-weight: bold;">
             <span>Outstanding:</span>
             <span>₦${outstanding.toFixed(2)}</span>
           </div>
-        ` : ''}
-        <div style="display: flex; justify-content: space-between; padding: 0.5rem 0;">
-          <span>Payment Method:</span>
-          <span style="text-transform: capitalize;">${sale.payment_method}</span>
-        </div>
+        `
+            : ""
+        }
+        ${
+          !!sale.payments.length
+            ? `
+          <div style="display: flex; justify-content: space-between; padding: 0.5rem 0;">
+            <span>Payment Method:</span>
+            <span style="text-transform: capitalize;">${sale.payments
+              .map((p) => p.payment_method)
+              .join(", ")}</span>
+          </div>
+          `
+            : ""
+        }
+        
       </div>
     </div>
 
@@ -142,5 +188,5 @@ return `
       <p>Thank you for your patronage!</p>
       <p>Please come again</p>
     </div>
-  </div>`
-}
+  </div>`;
+};

@@ -59,7 +59,7 @@ impl DatabaseConnection {
             Ok(_) => println!("Migrations completed successfully"),
             Err(e) => {
                 eprintln!("Migration error: {}", e);
-                panic!("Failed to run database migrations");
+                // panic!("Failed to run database migrations");
             }
         };
     }

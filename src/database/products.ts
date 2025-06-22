@@ -40,6 +40,34 @@ export async function updateProduct(id: string, product: Partial<Omit<TProduct, 
     await db.execute(query, [id]);
 }
 
+export async function updateProductQuantity(id: string, quantity: number, reason: string) {
+    const db = await initDatabase();
+    try {
+      await db.beginTransaction();
+  
+      // Update product quantity
+      await db.executeQuery(
+        `UPDATE products 
+         SET quantity_on_hand = quantity_on_hand + $1,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $2`,
+        [quantity, id]
+      );
+  
+      // Log the quantity adjustment
+      await db.executeQuery(
+        `INSERT INTO inventory_adjustments (id, product_id, quantity_changed, reason)
+         VALUES (lower(hex(randomblob(16))), $1, $2, $3)`,
+        [id, quantity, reason]
+      );
+  
+      await db.commit();
+    } catch (error) {
+      await db.rollback();
+      throw error;
+    }
+  }
+
 export async function deleteProduct(id: string) {
     const db = await initDatabase();
     await db.execute('DELETE FROM products WHERE id = $1', [id]);
@@ -78,4 +106,19 @@ export async function searchProducts(query: string) {
         [searchTerm]
     );
     return result;
+}
+
+export async function updateProductPrice(id: string, newPrice: number) {
+  const db = await initDatabase();
+  try {
+    await db.execute(
+      `UPDATE products 
+       SET selling_price = $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [newPrice, id]
+    );
+  } catch (error) {
+    throw error;
+  }
 }

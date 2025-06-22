@@ -76,11 +76,9 @@ export type TSale = {
   customer_name?:string;
   employee_id: string;
   employee_name?:string;
-  amount_paid?:number;
   total_amount: number;
   discount: number;
-  payment_method: PaymentMethod;
-  bank_name: string;
+  payments?: Omit<TSalePayment, "id"|'sale_id'>[];
   created_at: string;
   updated_at: string;
 }
@@ -95,6 +93,15 @@ export type TSaleItem = {
   total_price: number;
   created_at: string;
   updated_at: string;
+}
+
+export type TSalePayment = {
+  id: string;
+  sale_id: string;
+  payment_method: PaymentMethod;
+  bank_name: string;
+  amount: number;
+  reference_number: string;
 }
 
 export type TDebtor = {

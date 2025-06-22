@@ -21,14 +21,19 @@ import {
   CardHeader,
   CardTitle,
 } from "@components/ui/card";
-import { SALE_Sale } from "@/types/sales";
-import { Printer, Search, ArrowUpDown } from "lucide-react";
-import { getSales, getSaleItems } from "@/database/sales";
+import { Search, ArrowUpDown } from "lucide-react";
+import { getSales, getSaleItems, deleteSale } from "@/database/sales";
 import { TSale, TSaleItem } from "@/types/database";
-import { InvoiceModal } from "@/components/InvoiceModal"
 import PrintInvoiceButton from "@/components/PrintInvoiceButton";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Add this import
+import { Trash2 } from "lucide-react"; // Add this import
+import { useAppStore } from "@/lib/store";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 export default function SalesPage() {
+  const { auth: { user } } = useAppStore();
+  const isAdmin = user?.role === 'admin' || user?.role === 'manager';
+
   const [sales, setSales] = useState<TSale[]>([]);
   const [selectedSale, setSelectedSale] = useState<TSale | null>(null);
   const [saleItems, setSaleItems] = useState<TSaleItem[]>([]);
@@ -69,6 +74,16 @@ export default function SalesPage() {
     }
   };
 
+  const handleDeleteSale = async (saleId: string) => {
+    try {
+      await deleteSale(saleId);
+      await loadSales();
+      setIsDrawerOpen(false);
+    } catch (error) {
+      console.error("Failed to delete sale:", error);
+    }
+  };
+
   useEffect(() => {
     const filtered = sales.filter(
       (sale) =>
@@ -79,10 +94,7 @@ export default function SalesPage() {
   }, [searchTerm, sales]);
 
 
-  const handlePrintReceipt = () => {
-    setShowInvoice(true)
-  }
-  const handleSort = (key: keyof SALE_Sale) => {
+  const handleSort = (key: keyof TSale) => {
     let direction: "asc" | "desc" = "asc";
     if (
       sortConfig &&
@@ -107,7 +119,10 @@ export default function SalesPage() {
         <CardHeader>
           <CardTitle>Sales</CardTitle>
           <CardDescription>
-            Manage and view all sales transactions.
+            {isAdmin 
+              ? "Manage and view all sales transactions."
+              : "View recent sales transactions."
+            }
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -121,7 +136,7 @@ export default function SalesPage() {
                 className="pl-8"
               />
             </div>
-            <Button variant="outline">Export</Button>
+            {isAdmin && <Button variant="outline">Export</Button>}
           </div>
           <div className="rounded-md border">
             <Table>
@@ -134,7 +149,7 @@ export default function SalesPage() {
                     </Button>
                   </TableHead>
                   <TableHead>
-                    <Button variant="ghost" onClick={() => handleSort("date")}>
+                    <Button variant="ghost" onClick={() => handleSort('sale_date')}>
                       Date
                       <ArrowUpDown className="ml-2 h-4 w-4" />
                     </Button>
@@ -142,14 +157,14 @@ export default function SalesPage() {
                   <TableHead>
                     <Button
                       variant="ghost"
-                      onClick={() => handleSort("customer")}
+                      onClick={() => handleSort('customer_name')}
                     >
                       Customer
                       <ArrowUpDown className="ml-2 h-4 w-4" />
                     </Button>
                   </TableHead>
                   <TableHead>
-                    <Button variant="ghost" onClick={() => handleSort("total")}>
+                    <Button variant="ghost" onClick={() => handleSort('total_amount')}>
                       Total
                       <ArrowUpDown className="ml-2 h-4 w-4" />
                     </Button>
@@ -177,14 +192,14 @@ export default function SalesPage() {
                       onClick={() => handleRowClick(sale)}
                       className="cursor-pointer hover:bg-muted"
                     >
-                      <TableCell className="font-medium">{sale.id}</TableCell>
+                      <TableCell className="font-medium">{sale.id.slice(-8).toUpperCase()}</TableCell>
                       <TableCell>
                         {format(new Date(sale.created_at), "PPpp")}
                       </TableCell>
                       <TableCell>{sale.customer_name}</TableCell>
                       <TableCell>₦{sale.total_amount.toFixed(2)}</TableCell>
                       <TableCell className="capitalize">
-                        {sale.payment_method}
+                        {sale.payments.map((payment) => payment.payment_method).join(", ") || "N/A"}
                       </TableCell>
                     </TableRow>
                   ))
@@ -196,90 +211,107 @@ export default function SalesPage() {
       </Card>
 
       <Sheet open={isDrawerOpen} onOpenChange={setIsDrawerOpen}>
-        <SheetContent className="sm:max-w-[540px]">
-          {selectedSale && (
-            <div className="mt-6 space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Sale Information</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p>
-                    <strong>Customer:</strong> {selectedSale.customer_name}
-                  </p>
-                  <p>
-                    <strong>Cashier:</strong> {selectedSale.employee_name}
-                  </p>
-                  <p>
-                    <strong>Date:</strong>{" "}
-                    {format(new Date(selectedSale.created_at), "PPpp")}
-                  </p>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>Items</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Product</TableHead>
-                        <TableHead>Quantity</TableHead>
-                        <TableHead>Price</TableHead>
-                        <TableHead>Total</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {saleItems.map((item) => (
-                        <TableRow key={item.id}>
-                          <TableCell>{item.product_name}</TableCell>
-                          <TableCell>{item.quantity}</TableCell>
-                          <TableCell>₦{item.unit_price.toFixed(2)}</TableCell>
-                          <TableCell>₦{item.total_price.toFixed(2)}</TableCell>
+        <SheetContent className="sm:max-w-[540px] h-screen">
+          <ScrollArea className="h-[98vh]">
+            {selectedSale && (
+              <div className="mt-6 space-y-6">
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Sale Information</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <p>
+                      <strong>Customer:</strong> {selectedSale.customer_name}
+                    </p>
+                    <p>
+                      <strong>Cashier:</strong> {selectedSale.employee_name}
+                    </p>
+                    <p>
+                      <strong>Date:</strong>{" "}
+                      {format(new Date(selectedSale.created_at), "PPpp")}
+                    </p>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Items</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Product</TableHead>
+                          <TableHead>Quantity</TableHead>
+                          <TableHead>Price</TableHead>
+                          <TableHead>Total</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-6">
-                  <div className="flex justify-between items-center">
-                    <div>
-                      <p className="font-semibold text-lg">
-                        Total: ₦{selectedSale.total_amount.toFixed(2)}
-                      </p>
-                      <p>
-                        Payment Method:{" "}
-                        <span className="capitalize">
-                          {selectedSale.payment_method}
-                        </span>
-                      </p>
-                      {selectedSale.bank_name && (
-                        <p>Bank: {selectedSale.bank_name}</p>
-                      )}
+                      </TableHeader>
+                      <TableBody>
+                        {saleItems.map((item) => (
+                          <TableRow key={item.id}>
+                            <TableCell>{item.product_name}</TableCell>
+                            <TableCell>{item.quantity}</TableCell>
+                            <TableCell>₦{item.unit_price.toFixed(2)}</TableCell>
+                            <TableCell>₦{item.total_price.toFixed(2)}</TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="flex justify-between items-center">
+                      <div>
+                        <p className="font-semibold text-lg">
+                          Total: ₦{selectedSale.total_amount.toFixed(2)}
+                        </p>
+                        <p>
+                          Payment Method:{" "}
+                          <span className="capitalize">
+                            {selectedSale.payments.map((payment) => payment.payment_method).join(", ") || "N/A"}
+                          </span>
+                        </p>
+                      </div>
+                      <div className="flex gap-2">
+                        <PrintInvoiceButton sale={selectedSale} items={saleItems} />
+                        {isAdmin && (
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button variant="destructive" size="icon">
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Sale</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete this sale? This action cannot be undone.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleDeleteSale(selectedSale.id)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Delete
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        )}
+                      </div>
                     </div>
-                    <PrintInvoiceButton sale={selectedSale} items={saleItems} />
-                    {/* <Button onClick={handlePrintReceipt}>
-                      <Printer className="mr-2 h-4 w-4" />
-                      Print Receipt
-                    </Button> */}
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
-          )}
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+          </ScrollArea>
         </SheetContent>
       </Sheet>
-      {selectedSale && (
-        <InvoiceModal
-          open={showInvoice}
-          onOpenChange={setShowInvoice}
-          sale={selectedSale}
-          items={saleItems}
-        />
-      )}
     </div>
   );
 }

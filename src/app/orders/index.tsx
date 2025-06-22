@@ -1,13 +1,27 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { format } from 'date-fns'
-import { motion, AnimatePresence } from 'framer-motion'
-import { PlusCircle, Search, ArrowUpDown, FileText, Truck, XCircle, CheckCircle } from 'lucide-react'
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@components/ui/card"
-import { Input } from "@components/ui/input"
-import { Button } from "@components/ui/button"
-import { Badge } from "@components/ui/badge"
+import { useEffect, useState } from "react";
+import { format } from "date-fns";
+import { motion } from "framer-motion";
+import {
+  PlusCircle,
+  Search,
+  ArrowUpDown,
+  FileText,
+  Truck,
+  XCircle,
+  CheckCircle,
+} from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -15,7 +29,7 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@components/ui/table"
+} from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -24,87 +38,235 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from "@components/ui/dialog"
-import { Label } from "@components/ui/label"
-import { ScrollArea } from "@components/ui/scroll-area"
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@components/ui/select"
-import { mockPurchaseOrders, mockSuppliers, mockProducts, PurchaseOrder, Supplier } from '@/lib/mock-data'
+} from "@/components/ui/select";
+import {
+  getPurchaseOrders,
+  createPurchaseOrder,
+  updatePurchaseOrderStatus,
+  type PurchaseOrder,
+  type PurchaseOrderItem,
+  getPurchaseOrderItems,
+  createPurchaseReceipt,
+} from "@/database/purchase-orders";
+import { getSuppliers, type Supplier } from "@/database/suppliers";
+import { getProducts } from "@/database/products";
+import { TProduct } from "@/types/database";
+import { toast } from "@/hooks/use-toast";
+import { useAppStore } from "@/lib/store";
 
 export default function PurchaseOrdersPage() {
-  const [searchTerm, setSearchTerm] = useState('')
-  const [sortColumn, setSortColumn] = useState<keyof PurchaseOrder>('orderDate')
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
-  const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null)
-  const [editingPO, setEditingPO] = useState<PurchaseOrder | null>(null)
-  const [newPOItems, setNewPOItems] = useState<PurchaseOrder['items']>([])
+  const {
+    auth: { user },
+  } = useAppStore();
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+  const [products, setProducts] = useState<TProduct[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [newPO, setNewPO] = useState({
+    supplier_id: "",
+    items: [] as {
+      product_id: string;
+      quantity_ordered: number;
+      unit_price: number;
+    }[],
+  });
+  const [isReceiving, setIsReceiving] = useState(false);
+  const [receivingItems, setReceivingItems] = useState<
+    Array<{
+      product_id: string;
+      product_name: string;
+      quantity_ordered: number;
+      quantity_received: number;
+    }>
+  >([]);
 
-  const filteredPOs = mockPurchaseOrders.filter(po =>
-    po.supplierName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    po.id.toLowerCase().includes(searchTerm.toLowerCase())
-  ).sort((a, b) => {
-    if (a[sortColumn] < b[sortColumn]) return sortDirection === 'asc' ? -1 : 1
-    if (a[sortColumn] > b[sortColumn]) return sortDirection === 'asc' ? 1 : -1
-    return 0
-  })
+  useEffect(() => {
+    loadInitialData();
+  }, []);
 
-  const handleSort = (column: keyof PurchaseOrder) => {
-    if (column === sortColumn) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
-    } else {
-      setSortColumn(column)
-      setSortDirection('asc')
+  async function loadInitialData() {
+    try {
+      const [ordersData, suppliersData, productsData] = await Promise.all([
+        getPurchaseOrders(),
+        getSuppliers(),
+        getProducts(),
+      ]);
+
+      setPurchaseOrders(ordersData);
+      setSuppliers(suppliersData);
+      setProducts(productsData);
+      setIsLoading(false);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load data",
+      });
+      setIsLoading(false);
     }
   }
 
-  const statusIcon = (status: PurchaseOrder['status']) => {
+  const handleCreatePO = async () => {
+    try {
+      await createPurchaseOrder(
+        {
+          supplier_id: newPO.supplier_id,
+          order_date: new Date().toISOString(),
+          status: "pending",
+        },
+        newPO.items
+      );
+
+      setIsCreating(false);
+      setNewPO({ supplier_id: "", items: [] });
+      await loadInitialData();
+
+      toast({
+        title: "Success",
+        description: "Purchase order created successfully",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to create purchase order",
+      });
+    }
+  };
+
+  const statusIcon = (status: PurchaseOrder["status"]) => {
     switch (status) {
-      case 'Pending': return <FileText className="h-4 w-4 text-yellow-500" />
-      case 'Approved': return <CheckCircle className="h-4 w-4 text-green-500" />
-      case 'Disapproved': return <XCircle className="h-4 w-4 text-red-500" />
-      case 'Delivered': return <Truck className="h-4 w-4 text-blue-500" />
-      case 'Cancelled': return <XCircle className="h-4 w-4 text-gray-500" />
+      case "pending":
+        return <FileText className="h-4 w-4 text-yellow-500" />;
+      case "approved":
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      case "cancelled":
+        return <XCircle className="h-4 w-4 text-red-500" />;
+      case "received":
+        return <Truck className="h-4 w-4 text-blue-500" />;
+      case "partially_received":
+        return <XCircle className="h-4 w-4 text-gray-500" />;
     }
-  }
+  };
 
-  const handleApprove = (id: string) => {
-    const updatedPOs = mockPurchaseOrders.map(po =>
-      po.id === id ? { ...po, status: 'Approved' as const } : po
-    )
-    // In a real app, you'd make an API call here
-    console.log('Approved PO:', id)
-    // Update the state (mock update)
-    mockPurchaseOrders.splice(0, mockPurchaseOrders.length, ...updatedPOs)
-  }
+  const handleReceivePO = async (po: PurchaseOrder) => {
+    const items = await getPurchaseOrderItems(po.id);
+    setReceivingItems(
+      items.map((item) => ({
+        ...item,
+        quantity_received: 0,
+      }))
+    );
+    setIsReceiving(true);
+  };
 
-  const handleDisapprove = (id: string) => {
-    const updatedPOs = mockPurchaseOrders.map(po =>
-      po.id === id ? { ...po, status: 'Disapproved' as const } : po
-    )
-    // In a real app, you'd make an API call here
-    console.log('Disapproved PO:', id)
-    // Update the state (mock update)
-    mockPurchaseOrders.splice(0, mockPurchaseOrders.length, ...updatedPOs)
-  }
+  const handleSubmitReceipt = async () => {
+    try {
+      await createPurchaseReceipt({
+        purchase_order_id: selectedPO!.id,
+        employee_id: user!.id,
+        items: receivingItems.map((item) => ({
+          product_id: item.product_id,
+          quantity_received: item.quantity_received,
+        })),
+      });
 
-  const handleUpdatePO = (updatedPO: PurchaseOrder) => {
-    const updatedPOs = mockPurchaseOrders.map(po =>
-      po.id === updatedPO.id ? updatedPO : po
-    )
-    // In a real app, you'd make an API call here
-    console.log('Updated PO:', updatedPO)
-    // Update the state (mock update)
-    mockPurchaseOrders.splice(0, mockPurchaseOrders.length, ...updatedPOs)
-    setEditingPO(null)
-  }
+      setIsReceiving(false);
+      setReceivingItems([]);
+      await loadInitialData();
+
+      toast({
+        title: "Success",
+        description: "Items received successfully",
+      });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to receive items",
+      });
+    }
+  };
+
+  const handleStatusUpdate = async (
+    id: string,
+    status: PurchaseOrder["status"]
+  ) => {
+    try {
+      await updatePurchaseOrderStatus(id, status);
+      await loadInitialData();
+      toast({
+        title: "Success",
+        description: "Status updated successfully",
+      });
+    } catch (error) {
+      console.log(error)
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to update status",
+      });
+    }
+  };
+
+  const addNewItem = () => {
+    setNewPO((prev) => ({
+      ...prev,
+      items: [
+        ...prev.items,
+        { product_id: "", quantity_ordered: 1, unit_price: 0 },
+      ],
+    }));
+  };
+
+  const removeItem = (index: number) => {
+    setNewPO((prev) => ({
+      ...prev,
+      items: prev.items.filter((_, i) => i !== index),
+    }));
+  };
+
+  const updateItem = (index: number, field: string, value: string | number) => {
+    setNewPO((prev) => {
+      const newItems = [...prev.items];
+      newItems[index] = { ...newItems[index], [field]: value };
+      if (field === "product_id") {
+        const product = products.find((p) => p.id === value);
+        if (product) {
+          newItems[index].unit_price = product.cost_price;
+        }
+      }
+      return { ...prev, items: newItems };
+    });
+  };
+
+  const handleViewPO = async (po: PurchaseOrder) => {
+    const items = await getPurchaseOrderItems(po.id);
+
+    setSelectedPO({ ...po, items });
+  };
+
+  const filteredPOs = purchaseOrders.filter(
+    (po) =>
+      po.supplier_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      po.id.toLowerCase().includes(searchTerm.toLowerCase())
+  );
 
   return (
     <div className="container mx-auto py-10">
+      {/* Header and search section */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -115,102 +277,80 @@ export default function PurchaseOrdersPage() {
         <Card>
           <CardHeader>
             <CardTitle>Manage Purchase Orders</CardTitle>
-            <CardDescription>View and create purchase orders for your business.</CardDescription>
+            <CardDescription>Create and manage purchase orders</CardDescription>
           </CardHeader>
           <CardContent>
+            {/* Search and Create button */}
             <div className="flex justify-between items-center mb-4">
               <div className="relative w-64">
                 <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
-                  placeholder="Search purchase orders..."
+                  placeholder="Search orders..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="pl-8"
                 />
               </div>
-              <Dialog>
+              <Dialog open={isCreating} onOpenChange={setIsCreating}>
                 <DialogTrigger asChild>
-                  <Button onClick={() => {
-                    setEditingPO(null)
-                    setNewPOItems([])
-                  }}>
+                  <Button>
                     <PlusCircle className="mr-2 h-4 w-4" />
-                    New Purchase Order
+                    New Order
                   </Button>
                 </DialogTrigger>
                 <DialogContent className="sm:max-w-[600px]">
                   <DialogHeader>
-                    <DialogTitle>{editingPO ? 'Edit Purchase Order' : 'Create Purchase Order'}</DialogTitle>
+                    <DialogTitle>Create Purchase Order</DialogTitle>
                     <DialogDescription>
-                      {editingPO ? 'Edit the details of the purchase order.' : 'Fill in the details to create a new purchase order.'}
+                      Create a new purchase order for your suppliers
                     </DialogDescription>
                   </DialogHeader>
+
+                  {/* Create PO Form */}
                   <div className="grid gap-4 py-4">
                     <div className="grid grid-cols-4 items-center gap-4">
                       <Label htmlFor="supplier" className="text-right">
                         Supplier
                       </Label>
-                      <Select defaultValue={editingPO?.supplierName} onValueChange={(value) => {
-                        if (editingPO) {
-                          setEditingPO({ ...editingPO, supplierName: value })
+                      <Select
+                        value={newPO.supplier_id}
+                        onValueChange={(value) =>
+                          setNewPO((prev) => ({ ...prev, supplier_id: value }))
                         }
-                      }}>
+                      >
                         <SelectTrigger className="col-span-3">
-                          <SelectValue placeholder="Select a supplier" />
+                          <SelectValue placeholder="Select supplier" />
                         </SelectTrigger>
                         <SelectContent>
-                          {mockSuppliers.map((supplier) => (
-                            <SelectItem key={supplier.id} value={supplier.name}>
-                              {supplier.name}
+                          {suppliers.map((supplier) => (
+                            <SelectItem key={supplier.id} value={supplier.id}>
+                              {supplier.supplier_name}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </div>
+
                     <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="delivery-date" className="text-right">
-                        Delivery Date
-                      </Label>
-                      <Input
-                        id="delivery-date"
-                        type="date"
-                        className="col-span-3"
-                        value={editingPO ? format(editingPO.expectedDeliveryDate, 'yyyy-MM-dd') : ''}
-                        onChange={(e) => {
-                          if (editingPO) {
-                            setEditingPO({ ...editingPO, expectedDeliveryDate: new Date(e.target.value) })
-                          }
-                        }}
-                      />
-                    </div>
-                    <div className="grid grid-cols-4 items-center gap-4">
-                      <Label htmlFor="items" className="text-right">
-                        Items
-                      </Label>
+                      <Label className="text-right">Items</Label>
                       <div className="col-span-3 space-y-2">
-                        {(editingPO ? editingPO.items : newPOItems).map((item, index) => (
-                          <div key={index} className="flex items-center space-x-2">
+                        {newPO.items.map((item, index) => (
+                          <div key={index} className="flex items-center gap-2">
                             <Select
-                              value={item.product.id}
-                              onValueChange={(value) => {
-                                const product = mockProducts.find(p => p.id === value)
-                                if (product) {
-                                  const updatedItems = [...(editingPO ? editingPO.items : newPOItems)]
-                                  updatedItems[index] = { ...item, product, unitPrice: product.price }
-                                  if (editingPO) {
-                                    setEditingPO({ ...editingPO, items: updatedItems })
-                                  } else {
-                                    setNewPOItems(updatedItems)
-                                  }
-                                }
-                              }}
+                              value={item.product_id}
+                              onValueChange={(value) =>
+                                updateItem(index, "product_id", value)
+                              }
                             >
-                              <SelectTrigger>
-                                <SelectValue placeholder="Select a product" />
+                              <SelectTrigger className="w-[200px]">
+                                <SelectValue placeholder="Select product" />
                               </SelectTrigger>
                               <SelectContent>
-                                {mockProducts.map((product) => (
-                                  <SelectItem key={product.id} value={product.id}>
+                                {products.map((product) => (
+                                  <SelectItem
+                                    key={product.id}
+                                    value={product.id}
+                                  >
                                     {product.name}
                                   </SelectItem>
                                 ))}
@@ -218,137 +358,127 @@ export default function PurchaseOrdersPage() {
                             </Select>
                             <Input
                               type="number"
-                              placeholder="Quantity"
-                              value={item.quantity}
-                              onChange={(e) => {
-                                const updatedItems = [...(editingPO ? editingPO.items : newPOItems)]
-                                updatedItems[index] = { ...item, quantity: parseInt(e.target.value) }
-                                if (editingPO) {
-                                  setEditingPO({ ...editingPO, items: updatedItems })
-                                } else {
-                                  setNewPOItems(updatedItems)
-                                }
-                              }}
-                              className="w-24"
-                            />
-                            <Button variant="outline" onClick={() => {
-                              const updatedItems = (editingPO ? editingPO.items : newPOItems).filter((_, i) => i !== index)
-                              if (editingPO) {
-                                setEditingPO({ ...editingPO, items: updatedItems })
-                              } else {
-                                setNewPOItems(updatedItems)
+                              value={item.quantity_ordered}
+                              onChange={(e) =>
+                                updateItem(
+                                  index,
+                                  "quantity_ordered",
+                                  parseInt(e.target.value)
+                                )
                               }
-                            }}>
+                              className="w-24"
+                              min="1"
+                            />
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => removeItem(index)}
+                            >
                               Remove
                             </Button>
                           </div>
                         ))}
-                        <Button onClick={() => {
-                          const newItem = { product: mockProducts[0], quantity: 1, unitPrice: mockProducts[0].price }
-                          if (editingPO) {
-                            setEditingPO({ ...editingPO, items: [...editingPO.items, newItem] })
-                          } else {
-                            setNewPOItems([...newPOItems, newItem])
-                          }
-                        }}>
+                        <Button variant="outline" onClick={addNewItem}>
                           Add Item
                         </Button>
                       </div>
                     </div>
                   </div>
+
                   <DialogFooter>
-                    <Button type="submit" onClick={() => {
-                      if (editingPO) {
-                        handleUpdatePO(editingPO)
-                      } else {
-                        // Handle creating new PO
-                        console.log('Create new PO', { supplier: editingPO?.supplierName, items: newPOItems })
-                      }
-                    }}>
-                      {editingPO ? 'Update Purchase Order' : 'Create Purchase Order'}
-                    </Button>
+                    <Button onClick={handleCreatePO}>Create Order</Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
             </div>
 
+            {/* Purchase Orders Table */}
             <div className="rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead className="w-[100px]">
-                      <Button variant="ghost" onClick={() => handleSort('id')}>
-                        PO ID
-                        <ArrowUpDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </TableHead>
-                    <TableHead>
-                      <Button variant="ghost" onClick={() => handleSort('supplierName')}>
-                        Supplier
-                        <ArrowUpDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </TableHead>
-                    <TableHead>
-                      <Button variant="ghost" onClick={() => handleSort('orderDate')}>
-                        Order Date
-                        <ArrowUpDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </TableHead>
-                    <TableHead>
-                      <Button variant="ghost" onClick={() => handleSort('expectedDeliveryDate')}>
-                        Expected Delivery
-                        <ArrowUpDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </TableHead>
-                    <TableHead>
-                      <Button variant="ghost" onClick={() => handleSort('totalAmount')}>
-                        Total Amount
-                        <ArrowUpDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </TableHead>
-                    <TableHead>
-                      <Button variant="ghost" onClick={() => handleSort('status')}>
-                        Status
-                        <ArrowUpDown className="ml-2 h-4 w-4" />
-                      </Button>
-                    </TableHead>
+                    <TableHead>Order ID</TableHead>
+                    <TableHead>Supplier</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Status</TableHead>
                     <TableHead className="text-right">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  <AnimatePresence>
-                    {filteredPOs.map((po) => (
-                      <motion.tr
-                        key={po.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <TableCell className="font-medium">{po.id}</TableCell>
-                        <TableCell>{po.supplierName}</TableCell>
-                        <TableCell>{format(po.orderDate, 'MMM dd, yyyy')}</TableCell>
-                        <TableCell>{format(po.expectedDeliveryDate, 'MMM dd, yyyy')}</TableCell>
-                        <TableCell>₦{po.totalAmount.toFixed(2)}</TableCell>
+                  {isLoading ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center">
+                        Loading...
+                      </TableCell>
+                    </TableRow>
+                  ) : filteredPOs.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center">
+                        No purchase orders found
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    filteredPOs.map((po) => (
+                      <TableRow key={po.id}>
+                        <TableCell>{po.id.slice(-8).toUpperCase()}</TableCell>
+                        <TableCell>{po.supplier_name}</TableCell>
                         <TableCell>
-                          <Badge variant={po.status === 'Approved' ? 'default' : po.status === 'Pending' ? 'secondary' : 'destructive'} className="flex w-fit items-center gap-1">
+                          {format(new Date(po.order_date), "MMM dd, yyyy")}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className="flex w-fit items-center gap-1"
+                          >
                             {statusIcon(po.status)}
                             {po.status}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right space-x-2">
-                          <Button variant="ghost" onClick={() => setSelectedPO(po)}>View</Button>
-                          <Button variant="ghost" onClick={() => setEditingPO(po)}>Edit</Button>
-                          {po.status === 'Pending' && (
-                            <>
-                              <Button variant="outline" onClick={() => handleApprove(po.id)}>Approve</Button>
-                              <Button variant="outline" onClick={() => handleDisapprove(po.id)}>Disapprove</Button>
-                            </>
+                        <TableCell className="flex gap-1 justify-end">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleViewPO(po)}
+                          >
+                            View
+                          </Button>
+                          {user?.role === "admin" &&
+                            po.status === "pending" && (
+                              <>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleStatusUpdate(po.id, "partially_received")
+                                  }
+                                >
+                                  Approve
+                                </Button>
+                                <Button
+                                  variant="destructive"
+                                  size="sm"
+                                  onClick={() =>
+                                    handleStatusUpdate(po.id, "cancelled")
+                                  }
+                                >
+                                  Cancel
+                                </Button>
+                              </>
+                            )}
+                          {(po.status === "approved" ||
+                            po.status === "partially_received") && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleReceivePO(po)}
+                            >
+                              Receive
+                            </Button>
                           )}
                         </TableCell>
-                      </motion.tr>
-                    ))}
-                  </AnimatePresence>
+                      </TableRow>
+                    ))
+                  )}
                 </TableBody>
               </Table>
             </div>
@@ -356,52 +486,50 @@ export default function PurchaseOrdersPage() {
         </Card>
       </motion.div>
 
+      {/* View PO Dialog */}
       <Dialog open={!!selectedPO} onOpenChange={() => setSelectedPO(null)}>
-        <DialogContent className="sm:max-w-[600px]">
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Purchase Order Details</DialogTitle>
-            <DialogDescription>
-              Detailed information about the selected purchase order.
-            </DialogDescription>
           </DialogHeader>
           {selectedPO && (
-            <ScrollArea className="h-[400px] pr-4">
+            <ScrollArea className="h-[400px]">
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label>PO ID</Label>
-                    <div className="font-semibold">{selectedPO.id}</div>
+                    <Label>Order ID</Label>
+                    <div className="font-medium">
+                      {selectedPO.id.slice(-8).toUpperCase()}
+                    </div>
                   </div>
                   <div>
                     <Label>Supplier</Label>
-                    <div className="font-semibold">{selectedPO.supplierName}</div>
+                    <div className="font-medium">
+                      {selectedPO.supplier_name}
+                    </div>
                   </div>
                   <div>
-                    <Label>Order Date</Label>
-                    <div>{format(selectedPO.orderDate, 'MMM dd, yyyy')}</div>
-                  </div>
-                  <div>
-                    <Label>Expected Delivery</Label>
-                    <div>{format(selectedPO.expectedDeliveryDate, 'MMM dd, yyyy')}</div>
-                  </div>
-                  <div>
-                    <Label>Total Amount</Label>
-                    <div className="font-semibold">₦{selectedPO.totalAmount.toFixed(2)}</div>
+                    <Label>Date</Label>
+                    <div>{format(new Date(selectedPO.order_date), "PPP")}</div>
                   </div>
                   <div>
                     <Label>Status</Label>
-                    <Badge variant={selectedPO.status === 'Delivered' ? 'default' : selectedPO.status === 'Pending' ? 'secondary' : 'destructive'} className="flex w-fit items-center gap-1 mt-1">
+                    <Badge
+                      variant="outline"
+                      className="flex w-fit items-center gap-1"
+                    >
                       {statusIcon(selectedPO.status)}
                       {selectedPO.status}
                     </Badge>
                   </div>
                 </div>
+
                 <div>
                   <Label>Items</Label>
                   <Table>
                     <TableHeader>
                       <TableRow>
-                        <TableHead>Item</TableHead>
+                        <TableHead>Product</TableHead>
                         <TableHead>Quantity</TableHead>
                         <TableHead>Unit Price</TableHead>
                         <TableHead>Total</TableHead>
@@ -410,10 +538,15 @@ export default function PurchaseOrdersPage() {
                     <TableBody>
                       {selectedPO.items.map((item, index) => (
                         <TableRow key={index}>
-                          <TableCell>{item.product.name}</TableCell>
-                          <TableCell>{item.quantity}</TableCell>
-                          <TableCell>₦{item.unitPrice.toFixed(2)}</TableCell>
-                          <TableCell>₦{(item.quantity * item.unitPrice).toFixed(2)}</TableCell>
+                          <TableCell>{item.product_name}</TableCell>
+                          <TableCell>{item.quantity_ordered}</TableCell>
+                          <TableCell>₦{item.unit_price.toFixed(2)}</TableCell>
+                          <TableCell>
+                            ₦
+                            {(item.quantity_ordered * item.unit_price).toFixed(
+                              2
+                            )}
+                          </TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -424,140 +557,55 @@ export default function PurchaseOrdersPage() {
           )}
         </DialogContent>
       </Dialog>
-      <Dialog open={!!editingPO} onOpenChange={(open) => !open && setEditingPO(null)}>
-        <DialogContent className="sm:max-w-[600px]">
+
+      {/* Receive PO Dialog */}
+      <Dialog open={isReceiving} onOpenChange={setIsReceiving}>
+        <DialogContent>
           <DialogHeader>
-            <DialogTitle>{editingPO ? 'Edit Purchase Order' : 'Create Purchase Order'}</DialogTitle>
+            <DialogTitle>Receive Items</DialogTitle>
             <DialogDescription>
-              {editingPO ? 'Edit the details of the purchase order.' : 'Fill in the details to create a new purchase order.'}
+              Enter the quantities received for each item
             </DialogDescription>
           </DialogHeader>
-          <div className="grid gap-4 py-4">
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="supplier" className="text-right">
-                Supplier
-              </Label>
-              <Select defaultValue={editingPO?.supplierName} onValueChange={(value) => {
-                if (editingPO) {
-                  setEditingPO({ ...editingPO, supplierName: value })
-                }
-              }}>
-                <SelectTrigger className="col-span-3">
-                  <SelectValue placeholder="Select a supplier" />
-                </SelectTrigger>
-                <SelectContent>
-                  {mockSuppliers.map((supplier) => (
-                    <SelectItem key={supplier.id} value={supplier.name}>
-                      {supplier.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="delivery-date" className="text-right">
-                Delivery Date
-              </Label>
-              <Input
-                id="delivery-date"
-                type="date"
-                className="col-span-3"
-                value={editingPO ? format(editingPO.expectedDeliveryDate, 'yyyy-MM-dd') : ''}
-                onChange={(e) => {
-                  if (editingPO) {
-                    setEditingPO({ ...editingPO, expectedDeliveryDate: new Date(e.target.value) })
-                  }
-                }}
-              />
-            </div>
-            <div className="grid grid-cols-4 items-center gap-4">
-              <Label htmlFor="items" className="text-right">
-                Items
-              </Label>
-              <div className="col-span-3 space-y-2">
-                {(editingPO ? editingPO.items : newPOItems).map((item, index) => (
-                  <div key={index} className="flex items-center space-x-2">
-                    <Select
-                      value={item.product.id}
-                      onValueChange={(value) => {
-                        const product = mockProducts.find(p => p.id === value)
-                        if (product) {
-                          const updatedItems = [...(editingPO ? editingPO.items : newPOItems)]
-                          updatedItems[index] = { ...item, product, unitPrice: product.price }
-                          if (editingPO) {
-                            setEditingPO({ ...editingPO, items: updatedItems })
-                          } else {
-                            setNewPOItems(updatedItems)
-                          }
-                        }
-                      }}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select a product" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {mockProducts.map((product) => (
-                          <SelectItem key={product.id} value={product.id}>
-                            {product.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Input
-                      type="number"
-                      placeholder="Quantity"
-                      value={item.quantity}
-                      onChange={(e) => {
-                        const updatedItems = [...(editingPO ? editingPO.items : newPOItems)]
-                        updatedItems[index] = { ...item, quantity: parseInt(e.target.value) }
-                        if (editingPO) {
-                          setEditingPO({ ...editingPO, items: updatedItems })
-                        } else {
-                          setNewPOItems(updatedItems)
-                        }
-                      }}
-                      className="w-24"
-                    />
-                    <Button variant="outline" onClick={() => {
-                      const updatedItems = (editingPO ? editingPO.items : newPOItems).filter((_, i) => i !== index)
-                      if (editingPO) {
-                        setEditingPO({ ...editingPO, items: updatedItems })
-                      } else {
-                        setNewPOItems(updatedItems)
-                      }
-                    }}>
-                      Remove
-                    </Button>
-                  </div>
+          <div className="space-y-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Product</TableHead>
+                  <TableHead>Ordered</TableHead>
+                  <TableHead>Receiving</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {receivingItems.map((item, index) => (
+                  <TableRow key={index}>
+                    <TableCell>{item.product_name}</TableCell>
+                    <TableCell>{item.quantity_ordered}</TableCell>
+                    <TableCell>
+                      <Input
+                        type="number"
+                        min="0"
+                        max={item.quantity_ordered}
+                        value={item.quantity_received}
+                        onChange={(e) => {
+                          const newItems = [...receivingItems];
+                          newItems[index].quantity_received = parseInt(
+                            e.target.value
+                          );
+                          setReceivingItems(newItems);
+                        }}
+                      />
+                    </TableCell>
+                  </TableRow>
                 ))}
-                <Button onClick={() => {
-                  const newItem = { product: mockProducts[0], quantity: 1, unitPrice: mockProducts[0].price }
-                  if (editingPO) {
-                    setEditingPO({ ...editingPO, items: [...editingPO.items, newItem] })
-                  } else {
-                    setNewPOItems([...newPOItems, newItem])
-                  }
-                }}>
-                  Add Item
-                </Button>
-              </div>
-            </div>
+              </TableBody>
+            </Table>
           </div>
           <DialogFooter>
-            <Button type="submit" onClick={() => {
-              if (editingPO) {
-                handleUpdatePO(editingPO)
-              } else {
-                // Handle creating new PO
-                console.log('Create new PO', { supplier: editingPO?.supplierName, items: newPOItems })
-              }
-            }}>
-              {editingPO ? 'Update Purchase Order' : 'Create Purchase Order'}
-            </Button>
+            <Button onClick={handleSubmitReceipt}>Confirm Receipt</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }
-

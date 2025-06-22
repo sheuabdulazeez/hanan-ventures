@@ -84,14 +84,16 @@ export default function CreateSales() {
   );
 
   useEffect(() => {
-    Promise.all([
-      ensureWalkInCustomer(),
-      getCustomers(),
-      getProducts()
-    ]).then(([_, customersRes, productsRes]) => {
-      setCustomers(customersRes);
-      setProducts(productsRes);
-    });
+    ensureWalkInCustomer().finally(() => {
+      Promise.all([
+        getCustomers(),
+        getProducts()
+      ]).then(([customersRes, productsRes]) => {
+        setCustomers(customersRes);
+        setProducts(productsRes);
+      });
+    })
+    
   }, []);
 
 
@@ -142,7 +144,8 @@ export default function CreateSales() {
 
     // Check if there's enough stock
     const currentQuantity = existingItem ? existingItem.quantity : 0;
-    if (currentQuantity + 1 > product.quantity_on_hand) {
+    const requestedQuantity = currentQuantity + 0.25; // Increment by smallest unit (0.25)
+    if (requestedQuantity > product.quantity_on_hand) {
       toast({
         title: "Error",
         description: "Not enough stock available.",
@@ -152,17 +155,19 @@ export default function CreateSales() {
     }
 
     if (existingItem) {
+      const newQuantity = existingItem.quantity + (product.quantity_on_hand >= 1 ? 1 : product.quantity_on_hand);
       handleUpdateQuantity(
         currentSale.items.indexOf(existingItem),
-        existingItem.quantity + 1
+        newQuantity
       );
     } else {
+      const initialQuantity = product.quantity_on_hand >= 1 ? 1 : product.quantity_on_hand;
       const newSaleItem: SALE_SaleItem = {
         id: `ITEM${currentSale.items.length + 1}`,
         sale_id: currentSale.id,
         product_id: product.id,
         product: product,
-        quantity: 1,
+        quantity: initialQuantity,
         unit_price: product.selling_price,
         total_price: product.selling_price,
         created_at: new Date().toISOString(),
@@ -219,21 +224,18 @@ export default function CreateSales() {
 
   const handlePaymentSubmit = async (details: PaymentDetails) => {
     setIsLoading(true);
-    console.log(details)
 
     const currentSale = getCurrentSale();
     if (!currentSale || !currentSale.customer) return;
 
     try {
       // Prepare sale data
-      const saleData = {
+      const saleData: Omit<TSale, "id" | "created_at" | "updated_at"> = {
         customer_id: currentSale.customer.id,
         employee_id: auth.user.id, // TODO: Get from auth context
         total_amount: currentSale.total,
         discount: 0, // TODO: Add discount handling
-        bank_name: "",
-        amount_paid: details.receivedAmount,
-        payment_method: details.paymentMethod as any,
+        payments: details.payments,
         sale_date: new Date().toISOString(),
       };
 
@@ -248,15 +250,17 @@ export default function CreateSales() {
       // Create sale in database
       const saleId = await createSale(saleData, saleItems);
 
-      setPaymentDetails(details);
+      setPaymentDetails({...details, saleId});
       setShowPaymentModal(false);
       setShowInvoiceModal(true);
 
       // Mark the current sale as completed
-      updateCurrentSale({ status: "completed" });
+      updateCurrentSale({ status: "completed", id: saleId });
 
       // Create a new active sale
       createNewSale();
+
+      
 
       toast({
         title: "Success",
@@ -458,8 +462,9 @@ export default function CreateSales() {
                         <TableCell>
                           <Input
                             type="number"
-                            min="0.5"
-                            step="0.5"
+                            min="0.25"
+                            max={item.product.quantity_on_hand.toFixed(2)}
+                            step="0.25"
                             value={item.quantity}
                             onChange={(e) =>
                               handleUpdateQuantity(
@@ -545,6 +550,7 @@ export default function CreateSales() {
             customer: currentSale.customer!,
             items: currentSale.items,
             total: currentSale.total,
+            discount: 0,
             date: new Date(),
           }}
           onSubmit={handlePaymentSubmit}
@@ -558,12 +564,10 @@ export default function CreateSales() {
           sale={{
             id: activeSales.find(s => s.id === paymentDetails.saleId).id,
             total_amount: activeSales.find(s => s.id === paymentDetails.saleId).total,
-            bank_name: paymentDetails.account,
             discount: 0,
             employee_id: auth.user.id,
-            payment_method: paymentDetails.paymentMethod,
+            payments: paymentDetails.payments,
             created_at: new Date().toISOString(),
-            amount_paid: paymentDetails.receivedAmount,
             customer_name: activeSales.find(s => s.id === paymentDetails.saleId).customer!.name,
             employee_name: auth.user.name,
           }}

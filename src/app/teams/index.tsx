@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@components/ui/table"
 import { Switch } from "@components/ui/switch"
-import { create, getUsers } from "@/database/user"
+import { create, getUsers, update } from "@/database/user"
 import { TUser, UserRole } from "@/types/database"
 import { useAppStore } from "@/lib/store"
 
@@ -33,9 +33,6 @@ const teamMemberSchema = z.object({
   }),
   password: z
     .string()
-    .min(6, {
-      message: "Password must be at least 6 characters.",
-    })
     .optional(),
   role: z.nativeEnum(UserRole, {
     required_error: "Please select a role.",
@@ -52,6 +49,10 @@ interface TeamMember extends Omit<TeamMemberValues, "password"> {
 const defaultValues: Partial<TeamMemberValues> = {
   role: UserRole.cashier,
   isActive: true,
+  name: "",
+  username: "",
+  phone: "",
+  password: "",
 }
 
 export default function TeamMembersPage() {
@@ -63,26 +64,26 @@ export default function TeamMembersPage() {
   const form = useForm<TeamMemberValues>({
     resolver: zodResolver(teamMemberSchema),
     defaultValues,
+    resetOptions: { keepDefaultValues: true, keepValues: false }
   })
 
   async function onSubmit(data: TeamMemberValues) {
     setIsSubmitting(true)
     if (editingMember) {
       // // Update existing member
-      
-      // window.ipcRenderer.invoke("update-user", editingMember).then((res) => {
-      //   setTeamMembers(
-      //     teamMembers.map((member) =>
-      //       member.id === editingMember.id ? { ...member, ...data, password: undefined } : member,
-      //     ),
-      //   )
-      // })
-      
-      setEditingMember(null)
-      toast({
-        title: "Team member updated",
-        description: `${data.name}'s information has been updated.`,
+      await update(editingMember.id, data as Omit<TUser, "id" | "created_at" | "updated_at">)
+      .then((e) => {
+        getUsers().then(users => setTeamMembers(users))
+        toast({
+          title: "Team member updated",
+          description: `${data.name}'s information has been updated.`,
+        });
+        setEditingMember(null);
+      }).finally(() => {
+        setIsSubmitting(false);
+        form.reset();
       })
+      
     } else {
 
 
@@ -110,10 +111,11 @@ export default function TeamMembersPage() {
           description: err.includes("UNIQUE") ? "Username already exists" : "Something went wrong",
           variant: "destructive"
         })
+      }).finally(() => {
+        setIsSubmitting(false);
+        form.reset(defaultValues);
       })
     }
-    setIsSubmitting(false)
-    // form.reset(defaultValues)
   }
 
   function handleEdit(member: TeamMember) {
@@ -134,7 +136,6 @@ export default function TeamMembersPage() {
       })
     }
   }
-
 
   useEffect(() => {
     getUsers().then(users => setTeamMembers(users))
@@ -200,7 +201,7 @@ export default function TeamMembersPage() {
                     <FormItem>
                       <FormLabel>{editingMember ? "New Password (leave blank to keep current)" : "Password"}</FormLabel>
                       <FormControl>
-                        <Input {...field} type="password" />
+                        <Input {...field} type="password" required={!editingMember} value={field.value || ''}  />
                       </FormControl>
                       <FormMessage />
                     </FormItem>
@@ -273,10 +274,10 @@ export default function TeamMembersPage() {
                     <TableCell>{member.phone}</TableCell>
                     <TableCell className="capitalize">{member.role}</TableCell>
                     <TableCell>
-                      <Switch disabled={user.id === member.id} checked={member.isActive} onCheckedChange={() => user.id === member.id?null: handleToggleActive(member.id)} />
+                      <Switch disabled={user?.id === member.id} checked={member.isActive} onCheckedChange={() => user?.id === member.id?null: handleToggleActive(member.id)} />
                     </TableCell>
                     <TableCell>
-                      <Button disabled={user.id === member.id} variant="outline" size="sm" onClick={() => user.id === member.id ? null : handleEdit(member)}>
+                      <Button disabled={user?.id === member.id} variant="outline" size="sm" onClick={() => user?.id === member.id ? null : handleEdit(member)}>
                         Edit
                       </Button>
                     </TableCell>

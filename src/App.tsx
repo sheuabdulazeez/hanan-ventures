@@ -13,6 +13,7 @@ import CreateSales from "./app/sales/Create";
 import Stocks from "./app/stocks";
 import CreateStock from "./app/stocks/Create";
 import Supplliers from "./app/suppliers";
+import CreateSupplier from "./app/suppliers/create";
 import DebtorsPage from "./app/debtors";
 import PurchaseOrdersPage from "./app/orders";
 import Expenses from "./app/expenses";
@@ -43,6 +44,7 @@ function App() {
                     </Route>
                     <Route path='suppliers'>
                         <Route path='' element={<Supplliers />} />
+                        <Route path='create' element={<CreateSupplier />} />
                     </Route>
                     <Route path='debtors'>
                         <Route path='' element={<DebtorsPage />} />

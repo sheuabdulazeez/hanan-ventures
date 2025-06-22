@@ -1,34 +1,70 @@
 import { useEffect, useState } from 'react';
-import { FaTrash, FaFileExport, FaFileImport, FaPlus } from 'react-icons/fa';
+import { FaTrash, FaPlus } from 'react-icons/fa';
 import { Link } from 'react-router';
+import { getSuppliers, deleteSupplier, type Supplier } from '@/database/suppliers';
+import { format } from 'date-fns';
+import { useToast } from '@/hooks/use-toast';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
-interface Email {
-  id: number;
-  email: string;
-}
-
-export default function Supplliers() {
-  const [emails, setEmails] = useState<Email[]>([]);
+export default function Suppliers() {
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const emailsPerPage = 10;
+  const [isLoading, setIsLoading] = useState(true);
+  const { toast } = useToast();
+  const suppliersPerPage = 10;
 
-  const filteredEmails = emails.filter(email =>
-    email.email.toLowerCase().includes(searchTerm.toLowerCase())
+  useEffect(() => {
+    loadSuppliers();
+  }, []);
+
+  async function loadSuppliers() {
+    try {
+      const data = await getSuppliers();
+      setSuppliers(data);
+      setIsLoading(false);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to load suppliers"
+      });
+      setIsLoading(false);
+    }
+  }
+
+  const filteredSuppliers = suppliers.filter(supplier =>
+    supplier.supplier_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    supplier.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    supplier.phone?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-
-  const handleDelete = (id: number) => {
-    // TODO: handle delete
+  const handleDelete = async (id: string) => {
+    if (confirm('Are you sure you want to delete this supplier?')) {
+      try {
+        await deleteSupplier(id);
+        await loadSuppliers();
+        toast({
+          title: "Success",
+          description: "Supplier deleted successfully"
+        });
+      } catch (error) {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: "Failed to delete supplier"
+        });
+      }
+    }
   };
 
-  const indexOfLastEmail = currentPage * emailsPerPage;
-  const indexOfFirstEmail = indexOfLastEmail - emailsPerPage;
-  const currentEmails = filteredEmails.slice(indexOfFirstEmail, indexOfLastEmail);
+  const indexOfLastSupplier = currentPage * suppliersPerPage;
+  const indexOfFirstSupplier = indexOfLastSupplier - suppliersPerPage;
+  const currentSuppliers = filteredSuppliers.slice(indexOfFirstSupplier, indexOfLastSupplier);
 
   const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
 
-  const totalPages = Math.ceil(filteredEmails.length / emailsPerPage);
+  const totalPages = Math.ceil(filteredSuppliers.length / suppliersPerPage);
   const maxPageButtons = 5;
   const startPage = Math.max(1, currentPage - Math.floor(maxPageButtons / 2));
   const endPage = Math.min(totalPages, startPage + maxPageButtons - 1);
@@ -67,19 +103,69 @@ export default function Supplliers() {
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {currentEmails.map((email) => (
-              <tr key={email.id}>
-                <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{email.email}</td>
-                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                  <button
-                    onClick={() => handleDelete(email.id)}
-                    className="text-red-600 hover:text-red-900"
-                  >
-                    <FaTrash />
-                  </button>
-                </td>
+            {isLoading ? (
+              <tr>
+                <td colSpan={7} className="px-6 py-4 text-center">Loading...</td>
               </tr>
-            ))}
+            ) : currentSuppliers.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="px-6 py-4 text-center">No suppliers found</td>
+              </tr>
+            ) : (
+              currentSuppliers.map((supplier) => (
+                <tr key={supplier.id}>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{supplier.supplier_name}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{supplier.contact_person}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{supplier.email}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{supplier.phone}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{supplier.address}</td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {format(new Date(supplier.created_at), 'PPpp')}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <button className="text-red-600 hover:text-red-900">
+                          <FaTrash />
+                        </button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Delete Supplier</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Are you sure you want to delete this supplier? This action cannot be undone.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancel</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={async () => {
+                              try {
+                                await deleteSupplier(supplier.id);
+                                await loadSuppliers();
+                                toast({
+                                  title: "Success",
+                                  description: "Supplier deleted successfully"
+                                });
+                              } catch (error) {
+                                toast({
+                                  variant: "destructive",
+                                  title: "Error",
+                                  description: "Failed to delete supplier"
+                                });
+                              }
+                            }}
+                            className="bg-red-600 hover:bg-red-700"
+                          >
+                            Delete
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
