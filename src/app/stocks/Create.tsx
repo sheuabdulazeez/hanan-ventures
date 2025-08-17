@@ -25,14 +25,12 @@ const formSchema = z.object({
     message: "Sales price must be at least 0.01.",
   }),
   category: z.string({
-    required_error: "Please select a product category.",
+    required_error: "Please enter a product category.",
   }),
   stock: z.number().int().min(0, {
     message: "Stock quantity must be a non-negative integer.",
   }),
-  stockAlert: z.number().int().min(0, {
-    message: "Stock alert must be a non-negative integer.",
-  }),
+  stockAlert: z.number().int().optional(),
 })
 
 export default function CreateStock() {
@@ -116,17 +114,9 @@ export default function CreateStock() {
                     render={({ field }) => (
                       <FormItem>
                         <FormLabel>Category</FormLabel>
-                        <Select onValueChange={field.onChange} defaultValue={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select a category" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="alcoholic">Alcoholic</SelectItem>
-                            <SelectItem value="non-alcoholic">Non-alcoholic</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        <FormControl>
+                          <Input placeholder="Enter product category" {...field} className="w-full" />
+                        </FormControl>
                         <FormDescription>
                           Choose the category that best fits this product.
                         </FormDescription>

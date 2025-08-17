@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Search } from 'lucide-react'
+import { Search, Edit } from 'lucide-react'
 import { Link } from 'react-router'
 import { CustomerDetails } from "@/components/CustomerDetails"
 
@@ -36,6 +36,15 @@ export default function Customers() {
     } finally {
       setIsLoading(false)
     }
+  }
+
+  function handleCustomerUpdate(updatedCustomer: TCustomer) {
+    setCustomers(prev => 
+      prev.map(customer => 
+        customer.id === updatedCustomer.id ? updatedCustomer : customer
+      )
+    )
+    setSelectedCustomer(updatedCustomer)
   }
 
   const filteredCustomers = customers.filter(customer => 
@@ -87,16 +96,34 @@ export default function Customers() {
                   <TableCell>{customer.email || "N/A"}</TableCell>
                   <TableCell>{customer.phone || "N/A"}</TableCell>
                   <TableCell>
-                    <Button 
-                      variant="outline" 
-                      size="sm"
-                      onClick={() => {
-                        setSelectedCustomer(customer)
-                        setIsDetailsOpen(true)
-                      }}
-                    >
-                      View Details
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setSelectedCustomer(customer)
+                          setIsDetailsOpen(true)
+                        }}
+                      >
+                        View Details
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm"
+                        onClick={() => {
+                          setSelectedCustomer(customer)
+                          setIsDetailsOpen(true)
+                          // We'll set edit mode after the sheet opens
+                          setTimeout(() => {
+                            const editButton = document.querySelector('[data-edit-button]') as HTMLButtonElement
+                            editButton?.click()
+                          }, 100)
+                        }}
+                      >
+                        <Edit className="h-4 w-4 mr-1" />
+                        Edit
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -110,6 +137,7 @@ export default function Customers() {
           customer={selectedCustomer}
           open={isDetailsOpen}
           onOpenChange={setIsDetailsOpen}
+          onCustomerUpdate={handleCustomerUpdate}
         />
       )}
       </Card>

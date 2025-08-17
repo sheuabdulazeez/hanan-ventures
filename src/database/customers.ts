@@ -24,14 +24,19 @@ export async function createCustomer(customer: Omit<TCustomer, "id" | "created_a
 
 export async function updateCustomer(id: string, customer: Partial<Omit<TCustomer, "id" | "created_at" | "updated_at">>) {
     const db = await initDatabase();
-    const updates = Object.entries(customer)
-        .filter(([_, value]) => value !== undefined)
-        .map(([key, _]) => `${key} = $${key}`);
+    console.log(customer)
+    const filteredEntries = Object.entries(customer)
+        .filter(([_, value]) => value !== undefined);
     
-    if (updates.length === 0) return;
+    if (filteredEntries.length === 0) return;
 
+    const updates = filteredEntries
+        .map(([key, _], index) => `${key} = $${index + 2}`);
+    const values = filteredEntries.map(([_, value]) => value);
+    
     const query = `UPDATE customers SET ${updates.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE id = $1`;
-    await db.execute(query, [ id ]);
+    await db.execute(query, [id, ...values]);
+    return id;
 }
 
 export async function searchCustomers(query: string) {

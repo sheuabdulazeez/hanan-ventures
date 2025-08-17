@@ -17,6 +17,16 @@
     "core:webview:default",
     "core:webview:allow-create-webview-window",
     "core:event:allow-listen",
-    "core:window:allow-close"
+    "core:window:allow-close",
+    "core:window:allow-destroy",
+    "core:window:allow-show",
+    {
+      "identifier": "fs:write-all",
+      "allow": [{ "path": "$APPDATA/*" }]
+    },
+    {
+      "identifier": "fs:read-all",
+      "allow": [{ "path": "$APPDATA/*" }]
+    }
   ]
 }

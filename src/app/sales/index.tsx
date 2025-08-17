@@ -87,7 +87,7 @@ export default function SalesPage() {
   useEffect(() => {
     const filtered = sales.filter(
       (sale) =>
-        sale.customer_id?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        sale?.customer_id?.toLowerCase()?.includes(searchTerm.toLowerCase()) ||
         sale.id.toLowerCase().includes(searchTerm.toLowerCase())
     );
     setFilteredSales(filtered);
@@ -265,14 +265,26 @@ export default function SalesPage() {
                   <CardContent className="pt-6">
                     <div className="flex justify-between items-center">
                       <div>
-                        <p className="font-semibold text-lg">
+                        <p className="font-semibold text-sm">
                           Total: ₦{selectedSale.total_amount.toFixed(2)}
+                        </p>
+                        <p className="font-semibold text-sm">
+                          Paid: ₦{selectedSale.payments.reduce((acc, payment) => acc + payment.amount, 0).toFixed(2)}
                         </p>
                         <p>
                           Payment Method:{" "}
-                          <span className="capitalize">
-                            {selectedSale.payments.map((payment) => payment.payment_method).join(", ") || "N/A"}
-                          </span>
+                          <div className="capitalize">
+                            {
+                              selectedSale.payments.map(payment => (
+                                <div className="ml-2">
+                                  <span className="text-neutral-foreground">{payment.payment_method}</span>
+                                  <span className="bg-neutral rounded-full px-2 py-1 font-medium">
+                                    ₦{payment.amount.toFixed(2)}
+                                  </span>
+                                </div>
+                              ))
+                            }
+                          </div>
                         </p>
                       </div>
                       <div className="flex gap-2">

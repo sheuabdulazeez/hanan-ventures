@@ -15,9 +15,12 @@ import CreateStock from "./app/stocks/Create";
 import Supplliers from "./app/suppliers";
 import CreateSupplier from "./app/suppliers/create";
 import DebtorsPage from "./app/debtors";
+import ProfitPage from "./app/profit";
 import PurchaseOrdersPage from "./app/orders";
 import Expenses from "./app/expenses";
+import SettingsPage from "./app/settings";
 import TeamMembersPage from "./app/teams";
+import ProductAnalysis from "./app/product-analysis/ProductAnalysis";
 
 function App() {
   useEffect(() => {
@@ -42,12 +45,18 @@ function App() {
                         <Route path='' element={<Stocks />} />
                         <Route path='create' element={<CreateStock />} />
                     </Route>
+                    <Route path='product-analysis'>
+                        <Route path=':id' element={<ProductAnalysis />} />
+                    </Route>
                     <Route path='suppliers'>
                         <Route path='' element={<Supplliers />} />
                         <Route path='create' element={<CreateSupplier />} />
                     </Route>
                     <Route path='debtors'>
                         <Route path='' element={<DebtorsPage />} />
+                    </Route>
+                    <Route path='profit'>
+                        <Route path='' element={<ProfitPage />} />
                     </Route>
                     <Route path='orders'>
                         <Route path='' element={<PurchaseOrdersPage />} />
@@ -62,8 +71,7 @@ function App() {
                         {/* <Route path='create' element={<CreateSale />} /> */}
                     </Route>
                     <Route path='settings'>
-                        <Route path='' element={<Expenses />} />
-                        {/* <Route path='create' element={<CreateSale />} /> */}
+                        <Route path='' element={<SettingsPage />} />
                     </Route>
                 </Route>
         </Route>

@@ -21,6 +21,7 @@ export type TDatabase = {
   purchase_receipts: TPurchaseReceipt[];
   purchase_receipt_items: TPurchaseReceiptItem[];
   business_expenses: TBusinessExpense[];
+  product_price_history: TProductPriceHistory[];
 }
 
 export type TUser = {
@@ -78,6 +79,8 @@ export type TSale = {
   employee_name?:string;
   total_amount: number;
   discount: number;
+  total_cost?: number;
+  gross_profit?: number;
   payments?: Omit<TSalePayment, "id"|'sale_id'>[];
   created_at: string;
   updated_at: string;
@@ -91,6 +94,8 @@ export type TSaleItem = {
   quantity: number;
   unit_price: number;
   total_price: number;
+  cost_price_at_sale?: number;
+  profit?: number;
   created_at: string;
   updated_at: string;
 }
@@ -181,4 +186,65 @@ export type TBusinessExpense = {
   employee_id: string;
   created_at: string;
   updated_at: string;
+}
+
+export type TAdminSetting = {
+  id: string;
+  key: string;
+  value: string;
+  description: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export type TProductPriceHistory = {
+  id: string;
+  product_id: string;
+  old_cost_price: number | null;
+  new_cost_price: number | null;
+  old_selling_price: number | null;
+  new_selling_price: number | null;
+  change_reason: string | null;
+  changed_by: string;
+  changed_by_name?:string;
+  created_at: string;
+}
+
+export enum InventoryAdjustmentType {
+  INCREASE = 'increase',
+  DECREASE = 'decrease',
+}
+
+export type TInventoryAdjustment = {
+  id: string;
+  product_id: string;
+  adjustment_type: InventoryAdjustmentType;
+  quantity: number;
+  reason: string; 
+  changed_by: string;
+  changed_by_name?:string;
+  created_at: string;
+}
+
+export type ProductAnalytics = {
+  product: TProduct;
+  priceHistory: TProductPriceHistory[];
+  salesData: {
+    totalTransactions: number;
+    totalSales: number;
+    totalRevenue: number;
+    avgSellingPrice: number;
+    minSellingPrice: number;
+    maxSellingPrice: number;
+    totalProfit: number;  
+    profitMargin: number;
+    avgProfitPerSale: number;
+    stockValue: number;
+  };
+  monthlySales: {
+    month: string;
+    quantitySold: number;
+    revenue: number;
+    profit: number;
+  }[];
 }

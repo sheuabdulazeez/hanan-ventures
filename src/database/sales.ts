@@ -82,6 +82,7 @@ export async function createSale(
     const { saleId } = await db.selectOne<{ saleId: string }>(
       `SELECT lower(hex(randomblob(16))) as saleId`
     );
+    
 
     // Generate sale ID
     await db.beginTransaction();
@@ -137,6 +138,9 @@ export async function createSale(
       );
     }
 
+    if(totalPaid < sale.total_amount - (sale.discount || 0) && sale.customer_id === "WALK-IN"){
+      throw new Error("Walk-in customer must pay the full amount");
+    }
     // Commit the transaction
     await db.commit();
 
@@ -153,7 +157,6 @@ export async function createSale(
 
     return saleId;
   } catch (error) {
-    console.log(error);
     await db.rollback();
     throw error;
   }

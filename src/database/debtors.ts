@@ -182,3 +182,24 @@ export async function getCustomerDebtHistory(customerId: string) {
         payments: JSON.parse(debt.payments) as TDebtorPayment[]
     }));
 }
+
+export async function getCustomerDebtSummary(customerId: string, currentSaleAmount: number = 0) {
+    const db = await initDatabase();
+    
+    // Get current outstanding debt (excluding current sale)
+    const [currentDebt] = await db.select<{ total_debt: number }[]>(`
+        SELECT COALESCE(SUM(amount_owed), 0) as total_debt
+        FROM debtors 
+        WHERE customer_id = $1 AND is_paid = 0
+    `, [customerId]);
+    
+    const previousBalance = currentDebt?.total_debt - currentSaleAmount;
+    const currentBalance = currentSaleAmount;
+    const totalBalance = currentDebt?.total_debt || 0;
+    
+    return {
+        previousBalance,
+        currentBalance,
+        totalBalance
+    };
+}

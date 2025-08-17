@@ -23,7 +23,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@components/ui/card";
-import { SALE_SaleItem } from "@/types/sales";
+import { ActiveSale, SALE_SaleItem } from "@/types/sales";
 import {
   Loader2,
   ShoppingCart,
@@ -49,37 +49,18 @@ import { TCustomer, TProduct, TSale } from "@/types/database";
 import { getProducts } from "@/database/products";
 import { createCustomer, ensureWalkInCustomer, getCustomers } from "@/database/customers";
 import { createSale } from "@/database/sales";
-import { updateStock } from "@/database/products";
 import { useAppStore } from "@/lib/store";
 import { randomString } from "@/lib/utils";
 
-interface ActiveSale {
-  id: string;
-  customer: TCustomer | null;
-  items: SALE_SaleItem[];
-  status: "active" | "paused" | "completed";
-  total: number;
-}
-
 export default function CreateSales() {
-  const { auth } = useAppStore();
+  const { auth, activeSales, addActiveSale, updateActiveSale, removeActiveSale } = useAppStore();
   const [customers, setCustomers] = useState<TCustomer[]>([]);
   const [products, setProducts] = useState<TProduct[]>([]);
-  const [activeSales, setActiveSales] = useState<ActiveSale[]>(() => {
-    const initialSale: ActiveSale = {
-      id: `SALE ${randomString(8)}`,
-      customer: null,
-      items: [],
-      status: "active",
-      total: 0,
-    };
-    return [initialSale];
-  });
-  const [currentSaleId, setCurrentSaleId] = useState<string | null>(() => activeSales[0].id);
+  const [currentSaleId, setCurrentSaleId] = useState<string | null>(() => activeSales.find(s => s.status === "active")?.id);
   const [isLoading, setIsLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
-  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails | null>(
+  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails & { sale: TSale&{items: SALE_SaleItem[]} } | null>(
     null
   );
 
@@ -107,7 +88,7 @@ export default function CreateSales() {
       status: "active",
       total: 0,
     };
-    setActiveSales(prev => [...prev, newSale]);
+    addActiveSale(newSale);
     setCurrentSaleId(newSale.id);
   };
 
@@ -125,9 +106,9 @@ export default function CreateSales() {
       created_at: new Date().toDateString(),
       updated_at: new Date().toDateString(),
     };
-    const id = await createCustomer(newCustomer);
-    setCustomers([...customers, { id, ...newCustomer }]);
-    updateCurrentSale({ customer: { id, ...newCustomer } });
+    await createCustomer(newCustomer);
+    const updatedCustomers = await getCustomers();
+    setCustomers(updatedCustomers);
     toast({
       title: "Success",
       description: `New customer "${name}" created.`,
@@ -250,17 +231,32 @@ export default function CreateSales() {
       // Create sale in database
       const saleId = await createSale(saleData, saleItems);
 
-      setPaymentDetails({...details, saleId});
+      setPaymentDetails({...details, saleId, sale: {
+        id: saleId,
+        total_amount: currentSale.total,
+        discount: 0,
+        employee_id: auth.user.id,
+        payments: details.payments,
+        sale_date: new Date().toISOString(),
+        customer_id: currentSale.customer.id,
+        customer_name: currentSale.customer.name,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        items: currentSale.items.map(item => ({
+          product: item.product,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_price: item.quantity * item.unit_price,
+        }))
+      }});
       setShowPaymentModal(false);
       setShowInvoiceModal(true);
 
       // Mark the current sale as completed
-      updateCurrentSale({ status: "completed", id: saleId });
+      await removeActiveSale(currentSale.id);
 
       // Create a new active sale
       createNewSale();
-
-      
 
       toast({
         title: "Success",
@@ -304,23 +300,11 @@ export default function CreateSales() {
     setShowPaymentModal(true);
   };
 
-  const updateCurrentSale = (updates: Partial<ActiveSale>) => {
-    return new Promise<void>((resolve) => {
-      setActiveSales((prevSales) => {
-        const updatedSales = prevSales.map((sale) =>
-          sale.id === currentSaleId
-            ? {
-                ...sale,
-                ...updates,
-                total: calculateTotal({ ...sale, ...updates }),
-                status: updates.status || sale.status, // Ensure status is properly updated
-              }
-            : sale
-        );
-        setTimeout(() => resolve(), 0); // Ensure state update completes before resolving
-        return updatedSales;
+  const updateCurrentSale = async (updates: Partial<ActiveSale>) => {
+    await updateActiveSale(currentSaleId, {
+        ...updates,
+        total: calculateTotal({ ...currentSale, ...updates }),
       });
-    });
   };
 
   const pauseSale = async () => {
@@ -341,23 +325,21 @@ export default function CreateSales() {
       });
   };
 
-  const resumeSale = (saleId: string) => {
-    setActiveSales((sales) =>
-      sales.map((sale) =>
-        sale.id === saleId ? { ...sale, status: "active" } : {...sale, status: "paused"}
-      )
-    );
+  const resumeSale = async (saleId: string) => {
+    await updateActiveSale(saleId, { status: "active" });
     setCurrentSaleId(saleId);
   };
 
   const cancelSale = (saleId: string) => {
-    setActiveSales((sales) => sales.filter((sale) => sale.id !== saleId));
+    removeActiveSale(saleId);
     if (saleId === currentSaleId) {
       const activeSale = activeSales.find((sale) => sale.status === "active");
       setCurrentSaleId(activeSale ? activeSale.id : null);
     }
   };
+
   const currentSale = getCurrentSale();
+
   return (
     <div className="container mx-auto py-10">
       <div className="flex justify-between items-center mb-6">
@@ -378,7 +360,6 @@ export default function CreateSales() {
                 </SheetDescription>
               </SheetHeader>
               <ScrollArea className="h-[calc(100vh-120px)] w-full mt-4">
-                {activeSales.length}
                 {activeSales
                   .filter(
                     (sale) =>
@@ -434,6 +415,7 @@ export default function CreateSales() {
             <div>
               <Label htmlFor="customer">Customer</Label>
               <CustomerSelect
+                selectedCustomer={currentSale?.customer}
                 customers={customers}
                 onSelect={(customer) => updateCurrentSale({ customer })}
                 onAddNew={handleAddCustomer}
@@ -448,8 +430,8 @@ export default function CreateSales() {
                 <Table>
                   <TableHeader>
                     <TableRow>
-                      <TableHead>Product</TableHead>
                       <TableHead>Quantity</TableHead>
+                      <TableHead>Product</TableHead>
                       <TableHead>Price</TableHead>
                       <TableHead>Total</TableHead>
                       <TableHead></TableHead>
@@ -458,7 +440,6 @@ export default function CreateSales() {
                   <TableBody>
                     {currentSale.items.map((item, index) => (
                       <TableRow key={index}>
-                        <TableCell>{item.product.name}</TableCell>
                         <TableCell>
                           <Input
                             type="number"
@@ -475,6 +456,7 @@ export default function CreateSales() {
                             className="w-20"
                           />
                         </TableCell>
+                        <TableCell>{item.product.name}</TableCell>
                         <TableCell>
                           <Input
                             type="number"
@@ -562,16 +544,17 @@ export default function CreateSales() {
           open={showInvoiceModal}
           onOpenChange={setShowInvoiceModal}
           sale={{
-            id: activeSales.find(s => s.id === paymentDetails.saleId).id,
-            total_amount: activeSales.find(s => s.id === paymentDetails.saleId).total,
-            discount: 0,
+            id: paymentDetails.saleId,
+            total_amount: paymentDetails.sale.total_amount,
+            discount: paymentDetails.sale.discount,
             employee_id: auth.user.id,
             payments: paymentDetails.payments,
             created_at: new Date().toISOString(),
-            customer_name: activeSales.find(s => s.id === paymentDetails.saleId).customer!.name,
+            customer_id: paymentDetails.sale.customer_id,
+            customer_name: paymentDetails.sale.customer_name,
             employee_name: auth.user.name,
           }}
-          items={activeSales.find(s => s.id === paymentDetails.saleId).items.map((item) => ({
+          items={paymentDetails.sale.items.map((item) => ({
             product_name: item.product.name,
             quantity: item.quantity,
             unit_price: item.unit_price,

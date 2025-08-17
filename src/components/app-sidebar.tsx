@@ -84,6 +84,11 @@ const data = {
           url: "/dashboard/expenses",
         },
         {
+          title: "Profit",
+          url: "/dashboard/profit",
+          icon: PieChart,
+        },
+        {
           title: "Settings",
           url: "/dashboard/settings",
         },
@@ -99,6 +104,7 @@ const data = {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const {
     auth: { user },
+    businessInfo
   } = useAppStore();
   const isAdmin = user?.role === "admin" || user?.role === "manager";
   return (
@@ -108,12 +114,20 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <div className="cursor-pointer">
-                <div className="flex h-10 w-10 items-center justify-center rounded bg-gradient-to-br from-purple-700 to-indigo-800">
-                  <AudioWaveform className="h-5 w-5 text-white" />
-                </div>
+                {
+                  businessInfo.logo ? (
+                    <div className="flex h-10 w-10 items-center justify-center rounded">
+                      <img src={businessInfo.logo} alt={businessInfo.name} className="h-10 w-10 rounded-full" />
+                    </div>
+                  ) : (
+                    <div className="flex h-10 w-10 items-center justify-center rounded bg-gradient-to-br from-purple-700 to-indigo-800">
+                      <AudioWaveform className="h-5 w-5 text-white" />
+                    </div>
+                  )
+                }
 
                 <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-bold text-md">Hanan Ventures</span>
+                  <span className="font-bold text-md">{businessInfo.name}</span>
                   <span className="">Enterprise</span>
                 </div>
               </div>

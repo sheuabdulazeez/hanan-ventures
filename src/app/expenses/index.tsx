@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { format } from 'date-fns'
 import { motion, AnimatePresence } from 'framer-motion'
-import { PlusCircle, Search, ArrowUpDown, Receipt, CreditCard, DollarSign } from 'lucide-react'
+import { PlusCircle, Search, ArrowUpDown, Receipt, CreditCard, DollarSign, Trash2, Edit } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@components/ui/card"
 import { Input } from "@components/ui/input"
 import { Button } from "@components/ui/button"
@@ -34,30 +34,165 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@components/ui/select"
-import { mockExpenses, Expense } from '@/lib/mock-data'
+import { toast } from 'sonner'
+import { TBusinessExpense, PaymentMethod } from '@/types/database'
+import { 
+  getExpenses, 
+  createExpense, 
+  updateExpense, 
+  deleteExpense, 
+  getExpenseCategories,
+  CreateExpenseData,
+  UpdateExpenseData 
+} from '@/database/expenses'
+import { formatAmount } from '@/lib/utils'
+import ExpenseStats from '@/components/ExpenseStats'
+import { useAppStore } from '@/lib/store'
 
 export default function Expenses() {
+  const { auth } = useAppStore()
   const [searchTerm, setSearchTerm] = useState('')
-  const [sortColumn, setSortColumn] = useState<keyof Expense>('date')
+  const [sortColumn, setSortColumn] = useState<keyof TBusinessExpense>('expense_date')
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc')
-  const [selectedExpense, setSelectedExpense] = useState<Expense | null>(null)
+  const [selectedExpense, setSelectedExpense] = useState<TBusinessExpense | null>(null)
+  const [expenses, setExpenses] = useState<TBusinessExpense[]>([])
+  const [categories, setCategories] = useState<string[]>([])
+  const [loading, setLoading] = useState(true)
+  const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
+  const [editingExpense, setEditingExpense] = useState<TBusinessExpense | null>(null)
+  const [refreshTrigger, setRefreshTrigger] = useState(0)
+  
+  // Form state
+  const [formData, setFormData] = useState<CreateExpenseData>({
+    expense_type: '',
+    description: '',
+    amount: 0,
+    payment_method: 'cash' as PaymentMethod,
+    bank_name: '',
+    employee_id: auth.user.id
+  })
 
-  const filteredExpenses = mockExpenses.filter(expense =>
+  useEffect(() => {
+    loadExpenses()
+    loadCategories()
+  }, [])
+
+  const loadExpenses = async () => {
+    try {
+      setLoading(true)
+      const data = await getExpenses()
+      setExpenses(data)
+    } catch (error) {
+      console.error('Failed to load expenses:', error)
+      toast.error('Failed to load expenses')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const loadCategories = async () => {
+    try {
+      const data = await getExpenseCategories()
+      setCategories(data)
+    } catch (error) {
+      console.error('Failed to load categories:', error)
+    }
+  }
+
+  const filteredExpenses = expenses.filter(expense =>
     expense.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    expense.category.toLowerCase().includes(searchTerm.toLowerCase())
+    expense.expense_type.toLowerCase().includes(searchTerm.toLowerCase())
   ).sort((a, b) => {
-    if (a[sortColumn] < b[sortColumn]) return sortDirection === 'asc' ? -1 : 1
-    if (a[sortColumn] > b[sortColumn]) return sortDirection === 'asc' ? 1 : -1
+    const aValue = a[sortColumn]
+    const bValue = b[sortColumn]
+    if (aValue < bValue) return sortDirection === 'asc' ? -1 : 1
+    if (aValue > bValue) return sortDirection === 'asc' ? 1 : -1
     return 0
   })
 
-  const handleSort = (column: keyof Expense) => {
+  const handleSort = (column: keyof TBusinessExpense) => {
     if (column === sortColumn) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc')
     } else {
       setSortColumn(column)
       setSortDirection('asc')
     }
+  }
+
+  const handleCreateExpense = async () => {
+    try {
+      if (!formData.expense_type || !formData.description || formData.amount <= 0) {
+        toast.error('Please fill in all required fields')
+        return
+      }
+
+      await createExpense(formData)
+      toast.success('Expense created successfully')
+      setIsCreateDialogOpen(false)
+      setFormData({
+        expense_type: '',
+        description: '',
+        amount: 0,
+        payment_method: 'cash' as PaymentMethod,
+        bank_name: '',
+        employee_id: 'default-user-id'
+      })
+      loadExpenses()
+      setRefreshTrigger(prev => prev + 1)
+    } catch (error) {
+      console.error('Failed to create expense:', error)
+      toast.error('Failed to create expense')
+    }
+  }
+
+  const handleUpdateExpense = async () => {
+    try {
+      if (!editingExpense) return
+
+      const updateData: UpdateExpenseData = {
+        expense_type: formData.expense_type,
+        description: formData.description,
+        amount: formData.amount,
+        payment_method: formData.payment_method,
+        bank_name: formData.bank_name
+      }
+
+      await updateExpense(editingExpense.id, updateData)
+      toast.success('Expense updated successfully')
+      setIsEditDialogOpen(false)
+      setEditingExpense(null)
+      loadExpenses()
+      setRefreshTrigger(prev => prev + 1)
+    } catch (error) {
+      console.error('Failed to update expense:', error)
+      toast.error('Failed to update expense')
+    }
+  }
+
+  const handleDeleteExpense = async (id: string) => {
+    try {
+      await deleteExpense(id)
+      toast.success('Expense deleted successfully')
+      loadExpenses()
+      setRefreshTrigger(prev => prev + 1)
+    } catch (error) {
+      console.error('Failed to delete expense:', error)
+      toast.error('Failed to delete expense')
+    }
+  }
+
+  const openEditDialog = (expense: TBusinessExpense) => {
+    setEditingExpense(expense)
+    setFormData({
+      expense_type: expense.expense_type,
+      description: expense.description,
+      amount: expense.amount,
+      payment_method: expense.payment_method,
+      bank_name: expense.bank_name || '',
+      employee_id: expense.employee_id
+    })
+    setIsEditDialogOpen(true)
   }
 
   const categoryIcon = (category: string) => {
@@ -76,9 +211,9 @@ export default function Expenses() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        <h1 className="text-4xl font-bold mb-6">Expenses</h1>
+        <ExpenseStats refreshTrigger={refreshTrigger} />
 
-        <Card>
+        <Card className='mt-5'>
           <CardHeader>
             <CardTitle>Manage Expenses</CardTitle>
             <CardDescription>View and create expenses for your business.</CardDescription>
@@ -94,7 +229,7 @@ export default function Expenses() {
                   className="pl-8"
                 />
               </div>
-              <Dialog>
+              <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
                 <DialogTrigger asChild>
                   <Button>
                     <PlusCircle className="mr-2 h-4 w-4" />
@@ -113,25 +248,42 @@ export default function Expenses() {
                       <Label htmlFor="description" className="text-right">
                         Description
                       </Label>
-                      <Input id="description" className="col-span-3" />
+                      <Input 
+                        id="description" 
+                        className="col-span-3" 
+                        value={formData.description}
+                        onChange={(e) => setFormData({...formData, description: e.target.value})}
+                      />
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                       <Label htmlFor="amount" className="text-right">
                         Amount
                       </Label>
-                      <Input id="amount" type="number" className="col-span-3" />
+                      <Input 
+                        id="amount" 
+                        type="number" 
+                        className="col-span-3" 
+                        value={formData.amount}
+                        onChange={(e) => setFormData({...formData, amount: parseFloat(e.target.value) || 0})}
+                      />
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                       <Label htmlFor="date" className="text-right">
                         Date
                       </Label>
-                      <Input id="date" type="date" className="col-span-3" />
+                      <Input 
+                        id="date" 
+                        type="date" 
+                        className="col-span-3" 
+                        value={formData.expense_date ? formData.expense_date.split('T')[0] : new Date().toISOString().split('T')[0]}
+                        onChange={(e) => setFormData({...formData, expense_date: e.target.value})}
+                      />
                     </div>
                     <div className="grid grid-cols-4 items-center gap-4">
                       <Label htmlFor="category" className="text-right">
                         Category
                       </Label>
-                      <Select>
+                      <Select value={formData.expense_type} onValueChange={(value) => setFormData({...formData, expense_type: value})}>
                         <SelectTrigger className="col-span-3">
                           <SelectValue placeholder="Select a category" />
                         </SelectTrigger>
@@ -140,7 +292,13 @@ export default function Expenses() {
                           <SelectItem value="utilities">Utilities</SelectItem>
                           <SelectItem value="meals">Meals</SelectItem>
                           <SelectItem value="software">Software</SelectItem>
+                          <SelectItem value="office_supplies">Office Supplies</SelectItem>
+                          <SelectItem value="marketing">Marketing</SelectItem>
+                          <SelectItem value="travel">Travel</SelectItem>
                           <SelectItem value="other">Other</SelectItem>
+                          {categories.map(category => (
+                            <SelectItem key={category} value={category}>{category}</SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     </div>
@@ -148,20 +306,38 @@ export default function Expenses() {
                       <Label htmlFor="payment-method" className="text-right">
                         Payment Method
                       </Label>
-                      <Select>
+                      <Select value={formData.payment_method} onValueChange={(value) => setFormData({...formData, payment_method: value as PaymentMethod})}>
                         <SelectTrigger className="col-span-3">
                           <SelectValue placeholder="Select a payment method" />
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="cash">Cash</SelectItem>
-                          <SelectItem value="credit-card">Credit Card</SelectItem>
-                          <SelectItem value="bank-transfer">Bank Transfer</SelectItem>
+                          <SelectItem value="pos">POS</SelectItem>
+                          <SelectItem value="transfer">Bank Transfer</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
+                    {formData.payment_method === 'transfer' && (
+                      <div className="grid grid-cols-4 items-center gap-4">
+                        <Label htmlFor="bank-name" className="text-right">
+                          Bank Name
+                        </Label>
+                        <Input 
+                          id="bank-name" 
+                          className="col-span-3" 
+                          value={formData.bank_name}
+                          onChange={(e) => setFormData({...formData, bank_name: e.target.value})}
+                        />
+                      </div>
+                    )}
                   </div>
                   <DialogFooter>
-                    <Button type="submit">Create Expense</Button>
+                    <Button type="button" variant="outline" onClick={() => setIsCreateDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button type="button" onClick={handleCreateExpense}>
+                      Create Expense
+                    </Button>
                   </DialogFooter>
                 </DialogContent>
               </Dialog>
@@ -190,13 +366,13 @@ export default function Expenses() {
                       </Button>
                     </TableHead>
                     <TableHead>
-                      <Button variant="ghost" onClick={() => handleSort('date')}>
+                      <Button variant="ghost" onClick={() => handleSort('expense_date')}>
                         Date
                         <ArrowUpDown className="ml-2 h-4 w-4" />
                       </Button>
                     </TableHead>
                     <TableHead>
-                      <Button variant="ghost" onClick={() => handleSort('category')}>
+                      <Button variant="ghost" onClick={() => handleSort('expense_type')}>
                         Category
                         <ArrowUpDown className="ml-2 h-4 w-4" />
                       </Button>
@@ -207,30 +383,59 @@ export default function Expenses() {
                 </TableHeader>
                 <TableBody>
                   <AnimatePresence>
-                    {filteredExpenses.map((expense) => (
-                      <motion.tr
-                        key={expense.id}
-                        initial={{ opacity: 0 }}
-                        animate={{ opacity: 1 }}
-                        exit={{ opacity: 0 }}
-                        transition={{ duration: 0.2 }}
-                      >
-                        <TableCell className="font-medium">{expense.id}</TableCell>
-                        <TableCell>{expense.description}</TableCell>
-                        <TableCell>₦{expense.amount.toFixed(2)}</TableCell>
-                        <TableCell>{format(expense.date, 'MMM dd, yyyy')}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className="flex w-fit items-center gap-1">
-                            {categoryIcon(expense.category)}
-                            {expense.category}
-                          </Badge>
+                    {loading ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          Loading expenses...
                         </TableCell>
-                        <TableCell>{expense.paymentMethod}</TableCell>
-                        <TableCell className="text-right">
-                          <Button variant="ghost" onClick={() => setSelectedExpense(expense)}>View Details</Button>
+                      </TableRow>
+                    ) : filteredExpenses.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={7} className="text-center py-8">
+                          No expenses found
                         </TableCell>
-                      </motion.tr>
-                    ))}
+                      </TableRow>
+                    ) : (
+                      filteredExpenses.map((expense) => (
+                        <motion.tr
+                          key={expense.id}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                        >
+                          <TableCell className="font-medium">{expense.id.slice(0, 8)}...</TableCell>
+                          <TableCell>{expense.description}</TableCell>
+                          <TableCell>{formatAmount(expense.amount)}</TableCell>
+                          <TableCell>{format(new Date(expense.expense_date), 'MMM dd, yyyy')}</TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="flex w-fit items-center gap-1">
+                              {categoryIcon(expense.expense_type)}
+                              {expense.expense_type}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>{expense.payment_method}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex gap-2 justify-end">
+                              <Button variant="ghost" size="sm" onClick={() => setSelectedExpense(expense)}>
+                                View
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => openEditDialog(expense)}>
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                onClick={() => handleDeleteExpense(expense.id)}
+                                className="text-red-600 hover:text-red-700"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </motion.tr>
+                      ))
+                    )}
                   </AnimatePresence>
                 </TableBody>
               </Table>
@@ -239,6 +444,7 @@ export default function Expenses() {
         </Card>
       </motion.div>
 
+      {/* View Expense Dialog */}
       <Dialog open={!!selectedExpense} onOpenChange={() => setSelectedExpense(null)}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
@@ -256,32 +462,132 @@ export default function Expenses() {
                 </div>
                 <div>
                   <Label>Amount</Label>
-                  <div className="font-semibold">₦{selectedExpense.amount.toFixed(2)}</div>
+                  <div className="font-semibold">{formatAmount(selectedExpense.amount)}</div>
                 </div>
                 <div>
                   <Label>Date</Label>
-                  <div>{format(selectedExpense.date, 'MMMM dd, yyyy')}</div>
+                  <div>{format(new Date(selectedExpense.expense_date), 'MMMM dd, yyyy')}</div>
                 </div>
                 <div>
                   <Label>Category</Label>
                   <Badge variant="outline" className="flex w-fit items-center gap-1 mt-1">
-                    {categoryIcon(selectedExpense.category)}
-                    {selectedExpense.category}
+                    {categoryIcon(selectedExpense.expense_type)}
+                    {selectedExpense.expense_type}
                   </Badge>
                 </div>
                 <div>
                   <Label>Payment Method</Label>
-                  <div>{selectedExpense.paymentMethod}</div>
+                  <div>{selectedExpense.payment_method}</div>
                 </div>
-                {selectedExpense.receipt && (
+                {selectedExpense.bank_name && (
                   <div>
-                    <Label>Receipt</Label>
-                    <img src={selectedExpense.receipt} alt="Receipt" className="mt-2 rounded-md border" />
+                    <Label>Bank Name</Label>
+                    <div>{selectedExpense.bank_name}</div>
                   </div>
                 )}
+                <div>
+                  <Label>Created</Label>
+                  <div>{format(new Date(selectedExpense.created_at), 'MMMM dd, yyyy HH:mm')}</div>
+                </div>
               </div>
             </ScrollArea>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Expense Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Edit Expense</DialogTitle>
+            <DialogDescription>
+              Update the expense details.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-description" className="text-right">
+                Description
+              </Label>
+              <Input 
+                id="edit-description" 
+                className="col-span-3" 
+                value={formData.description}
+                onChange={(e) => setFormData({...formData, description: e.target.value})}
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-amount" className="text-right">
+                Amount
+              </Label>
+              <Input 
+                id="edit-amount" 
+                type="number" 
+                className="col-span-3" 
+                value={formData.amount}
+                onChange={(e) => setFormData({...formData, amount: parseFloat(e.target.value) || 0})}
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-category" className="text-right">
+                Category
+              </Label>
+              <Select value={formData.expense_type} onValueChange={(value) => setFormData({...formData, expense_type: value})}>
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Select a category" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="rent">Rent</SelectItem>
+                  <SelectItem value="utilities">Utilities</SelectItem>
+                  <SelectItem value="meals">Meals</SelectItem>
+                  <SelectItem value="software">Software</SelectItem>
+                  <SelectItem value="office_supplies">Office Supplies</SelectItem>
+                  <SelectItem value="marketing">Marketing</SelectItem>
+                  <SelectItem value="travel">Travel</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                  {categories.map(category => (
+                    <SelectItem key={category} value={category}>{category}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="edit-payment-method" className="text-right">
+                Payment Method
+              </Label>
+              <Select value={formData.payment_method} onValueChange={(value) => setFormData({...formData, payment_method: value as PaymentMethod})}>
+                <SelectTrigger className="col-span-3">
+                  <SelectValue placeholder="Select a payment method" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">Cash</SelectItem>
+                  <SelectItem value="pos">POS</SelectItem>
+                  <SelectItem value="transfer">Bank Transfer</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {formData.payment_method === 'transfer' && (
+              <div className="grid grid-cols-4 items-center gap-4">
+                <Label htmlFor="edit-bank-name" className="text-right">
+                  Bank Name
+                </Label>
+                <Input 
+                  id="edit-bank-name" 
+                  className="col-span-3" 
+                  value={formData.bank_name}
+                  onChange={(e) => setFormData({...formData, bank_name: e.target.value})}
+                />
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={handleUpdateExpense}>
+              Update Expense
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -3,31 +3,31 @@
 import { useEffect, useRef, useState } from "react";
 import {
   Command,
+  CommandEmpty,
   CommandGroup,
   CommandInput,
   CommandItem,
   CommandList,
 } from "../components/ui/command";
 import { TCustomer } from "../types/database";
+import { Button } from "./ui/button";
 
 interface CustomerSelectProps {
   customers: TCustomer[];
+  selectedCustomer: TCustomer | null;
   onSelect: (customer: TCustomer) => void;
   onAddNew: (customer: string) => void;
 }
 
 export function CustomerSelect({
   customers=[],
+  selectedCustomer,
   onSelect,
   onAddNew,
 }: CustomerSelectProps) {
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState(selectedCustomer?.name || "");
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
-
-  const filteredCustomers = (customers || []).filter((customer) =>
-    customer.name.toLowerCase().includes(search.toLowerCase())
-  );
 
   const handleSelect = (customer: TCustomer) => {
     onSelect(customer);
@@ -48,21 +48,23 @@ export function CustomerSelect({
     };
   }, []);
 
+  useEffect(() => {
+    setSearch(selectedCustomer?.name || "");
+  }, [selectedCustomer]);
+
   return (
     <div ref={ref} className="relative">
-      <Command className="rounded-lg border shadow-md">
+      <Command className="rounded-lg border shadow-md" value={search}>
         <CommandInput
           placeholder="Search for a customer..."
+          onFocus={() => setOpen(true)}
           value={search}
-          onValueChange={(value) => {
-            setSearch(value);
-            setOpen(true);
-          }}
+          onValueChange={(value) => setSearch(value)}
         />
-        {open && search && (
+        {open && (
           <CommandList className="absolute z-50 top-10 w-full mt-1 bg-white rounded-lg border shadow-lg">
             <CommandGroup className="max-h-64 overflow-auto">
-              {filteredCustomers?.map((customer) => (
+              {customers?.map((customer) => (
                 <CommandItem
                   key={customer.id}
                   onSelect={() => handleSelect(customer)}
@@ -71,9 +73,13 @@ export function CustomerSelect({
                 </CommandItem>
               ))}
             </CommandGroup>
-            <CommandItem onSelect={() => onAddNew(search)} key={"create-customer"}>
-              Create "{search}"
-            </CommandItem>
+            
+            <CommandEmpty key={"create-customer"}>
+              <Button onClick={() => onAddNew(search)}>
+                Create "{search}" 
+
+              </Button>
+            </CommandEmpty>
           </CommandList>
         )}
       </Command>

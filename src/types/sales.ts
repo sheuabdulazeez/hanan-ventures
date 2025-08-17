@@ -15,6 +15,10 @@ export type SALE_SaleItem = Partial<TSaleItem> & {
     paymentMethod?: PaymentMethod;
   }
   
-  
-  
-  
+  export interface ActiveSale {
+    id: string;
+    customer: TCustomer | null;
+    items: SALE_SaleItem[];
+    status: "active" | "paused" | "completed";
+    total: number;
+  }
