@@ -128,11 +128,10 @@ export default function CreateSales() {
     const requestedQuantity = currentQuantity + 0.25; // Increment by smallest unit (0.25)
     if (requestedQuantity > product.quantity_on_hand) {
       toast({
-        title: "Error",
-        description: "Not enough stock available.",
+        title: "Stock Warning!",
+        description: "Not enough stock available. Kindly restock the product.",
         variant: "destructive",
       });
-      return;
     }
 
     if (existingItem) {
@@ -151,6 +150,7 @@ export default function CreateSales() {
         quantity: initialQuantity,
         unit_price: product.selling_price,
         total_price: product.selling_price,
+        cost_price_at_sale: product.cost_price,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       };
@@ -165,14 +165,13 @@ export default function CreateSales() {
     if (!currentSale) return;
 
     const item = currentSale.items[index];
-    if (quantity > item.product.quantity_on_hand) {
-      toast({
-        title: "Error",
-        description: "Not enough stock available.",
-        variant: "destructive",
-      });
-      return;
-    }
+    // if (quantity > item.product.quantity_on_hand) {
+    //   toast({
+    //     title: "Stock Warning!",
+    //     description: "Not enough stock available. Kindly restock the product.",
+    //     variant: "destructive",
+    //   });
+    // }
 
     const updatedItems = [...currentSale.items];
     updatedItems[index].quantity = quantity;
@@ -210,23 +209,28 @@ export default function CreateSales() {
     if (!currentSale || !currentSale.customer) return;
 
     try {
-      // Prepare sale data
-      const saleData: Omit<TSale, "id" | "created_at" | "updated_at"> = {
-        customer_id: currentSale.customer.id,
-        employee_id: auth.user.id, // TODO: Get from auth context
-        total_amount: currentSale.total,
-        discount: 0, // TODO: Add discount handling
-        payments: details.payments,
-        sale_date: new Date().toISOString(),
-      };
-
       // Prepare sale items
       const saleItems = currentSale.items.map((item) => ({
         product_id: item.product.id,
         quantity: item.quantity,
         unit_price: item.unit_price,
         total_price: item.quantity * item.unit_price,
+        cost_price_at_sale: item.cost_price_at_sale,
+        profit: item.quantity * (item.unit_price - item.cost_price_at_sale),
       }));
+
+      // Prepare sale data
+      const saleData: Omit<TSale, "id" | "created_at" | "updated_at"> = {
+        customer_id: currentSale.customer.id,
+        employee_id: auth.user.id, // TODO: Get from auth context
+        total_amount: currentSale.total,
+        discount: 0, // TODO: Add discount handling
+        total_cost: saleItems.reduce((total, item) => total + item.quantity * item.cost_price_at_sale, 0), // TODO: Add total cost handling
+        gross_profit: saleItems.reduce((total, item) => total + item.profit, 0), // TODO: Add gross profit handling
+        payments: details.payments,
+        sale_date: new Date().toISOString(),
+      };
+
 
       // Create sale in database
       const saleId = await createSale(saleData, saleItems);

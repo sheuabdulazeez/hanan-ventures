@@ -665,255 +665,381 @@ export const customerDebtStatementHtml = (
     <title>Debt Statement - ${customer.name}</title>
     <style>
         @page {
-          font-family: Tahoma;
-          size: A4;
-          margin: 20mm;
+          font-family:Tahoma;
+          size: 80mm auto;
+          margin: 0;
+          padding: 0;
         }
         
         @media print {
             @page {
-                font-family: Tahoma;
-                margin: 20mm;
-                size: A4;
+                font-family:Tahoma;
+                font-style: normal;
+                margin: 0;
+                padding: 0;
+                size: 80mm auto;
             }
             
             body {
                 font-size: 12px;
                 line-height: 1.4;
+                width: 100%;
+                height: 100%;
                 margin: 0;
                 padding: 0;
                 -webkit-print-color-adjust: exact;
                 color-adjust: exact;
+                color: black;
+            }
+
+            .print-content {
+                width: 100%;
+                height: auto;
+                padding: 0;
+                box-sizing: border-box;
+                margin: 0;
+            }
+            
+            * {
+                -webkit-box-sizing: border-box;
+                box-sizing: border-box;
             }
         }
-        
+
         body {
-            font-family: Tahoma, sans-serif;
+            font-family:Tahoma;
             font-size: 12px;
             line-height: 1.4;
             margin: 0;
-            padding: 20px;
-            color: #333;
+            padding: 2mm;
+            color: black;
+            background: white;
+        }
+
+        .print-content {
+            margin: 0 auto;
         }
         
-        .header {
+        .text-center { text-align: center; }
+        .text-right { text-align: right; }
+        .text-left { text-align: left; }
+        .space-y-1 > * + * { margin-top: 0.25rem; }
+        .space-y-2 > * + * { margin-top: 0.5rem; }
+        .space-y-4 > * + * { margin-top: 1rem; }
+        .text-xl { font-size: 16px; font-weight: 900; }
+        .text-lg { font-size: 14px; font-weight: 800; }
+        .text-sm { font-size: 12px; font-weight: 600; }
+        .text-xs { font-size: 10px; font-weight: 600; }
+        .font-bold { font-weight: 700; }
+        .font-extra-bold { font-weight: 900; }
+        .uppercase { text-transform: uppercase; }
+        .gap-2 { gap: 0.5rem; }
+        
+        .separator {
+            border-top: 2px dashed black;
+            margin: 5px 0;
+            width: 100%;
+        }
+        
+        .separator-solid {
+            border-top: 2px solid black;
+            margin: 4px 0;
+            width: 100%;
+        }
+        
+        .py-1 { padding-top: 0.25rem; padding-bottom: 0.25rem; }
+        .py-2 { padding-top: 0.5rem; padding-bottom: 0.5rem; }
+        .pt-2 { padding-top: 0.5rem; }
+        .mb-2 { margin-bottom: 0.5rem; }
+        .mb-3 { margin-bottom: 0.75rem; }
+        .mt-2 { margin-top: 0.5rem; }
+        .mt-3 { margin-top: 0.75rem; }
+        
+        table { 
+            width: 100%; 
+            border-collapse: collapse;
+            margin: 5px 0;
+            table-layout: fixed;
+            border: 1px solid black;
+        }
+        
+        th, td { 
+            padding: 4px 3px;
+            border: 1px solid black;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+            font-weight: 600;
+        }
+        
+        .item-table th {
+            font-size: 10px;
+            font-weight: 800;
+            background-color: #f0f0f0;
+            border: 1px solid black;
+            padding: 8px 4px;
             text-align: center;
-            border-bottom: 2px solid #333;
-            padding-bottom: 20px;
-            margin-bottom: 30px;
+        }
+        
+        .item-table td {
+            font-size: 10px;
+            font-weight: 600;
+            padding: 4px 3px;
+            vertical-align: top;
+            border: 1px solid black;
+        }
+        
+        .header-section {
+            margin-bottom: 3px;
+        }
+        
+        .logo {
+            max-width: 100px;
+            max-height: 100px;
+            margin: 0 auto 0 auto;
+            display: block;
         }
         
         .business-name {
-            font-size: 24px;
-            font-weight: bold;
-            margin-bottom: 10px;
+            font-size: 22px;
+            font-weight: 900;
+            margin-bottom: 3px;
+            letter-spacing: 0.5px;
         }
         
         .business-info {
-            font-size: 11px;
-            color: #666;
-            margin-bottom: 5px;
+            font-size: 10px;
+            font-weight: 600;
+            line-height: 1.4;
+            margin-bottom: 3px;
         }
         
-        .statement-title {
-            font-size: 18px;
-            font-weight: bold;
+        .transaction-info {
+            margin: 6px 0;
+            font-size: 10px;
+            font-weight: 600;
+        }
+        
+        .transaction-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 2px 0;
+            font-weight: 600;
+        }
+        
+        .totals-section {
+            margin-top: 6px;
+        }
+        
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 3px 0;
+            font-size: 12px;
+            font-weight: 700;
+            padding: 2px 0;
+        }
+        
+        .final-total {
+            font-weight: 900;
+            font-size: 14px;
+            border-top: 1px solid black;
+            border-bottom: 1px solid black;
+            padding: 6px 0;
+            margin: 4px 0;
+            background-color: #f0f0f0;
+        }
+        
+        .payment-section {
+            margin-top: 5px;
+            padding-top: 8px;
+            border-top: 1px dashed black;
+        }
+        
+        .footer-section {
             text-align: center;
-            margin: 30px 0 20px 0;
-            text-transform: uppercase;
+            margin-top: 8px;
+            padding-top: 10px;
+            border-top: 1px dashed black;
+            font-size: 10px;
+            font-weight: 600;
         }
         
-        .customer-info {
-            background: #f5f5f5;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 5px;
+        .cut-line {
+            text-align: center;
+            margin: 8px 0 10px 0;
+            font-size: 10px;
+            font-weight: 700;
+            color: #333;
         }
         
-        .customer-info h3 {
-            margin: 0 0 10px 0;
-            font-size: 16px;
-        }
-        
-        .info-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 5px;
-        }
-        
-        .summary {
-            background: #e8f4fd;
-            padding: 15px;
-            margin-bottom: 20px;
-            border-radius: 5px;
-            border-left: 4px solid #2196F3;
-        }
-        
-        .summary-row {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 8px;
-            font-weight: bold;
+        .no-break {
+            page-break-inside: avoid;
         }
         
         .outstanding {
-            color: #d32f2f;
-            font-size: 16px;
+            background-color: #e0e0e0;
+            padding: 6px;
+            border: 1px solid black;
+            margin-top: 4px;
+            font-weight: 800;
         }
         
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 20px;
+        .price-text {
+            font-weight: 700;
+            white-space: nowrap;
+            overflow: visible;
         }
         
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
+        /* Ensure all text is bold and readable */
+        body, div, span, p, td, th {
+            font-weight: 600;
         }
         
-        th {
-            background-color: #f2f2f2;
-            font-weight: bold;
+        /* Extra bold for important elements */
+        .business-name,
+        .final-total,
+        .outstanding,
+        .item-table th {
+            font-weight: 900;
+        }
+
+        .flex {
+            display: flex;
+        }
+        .justify-between {
+            justify-content: space-between;
         }
         
-        .amount {
-            text-align: right;
-        }
-        
-        .status-paid {
-            color: #4caf50;
-            font-weight: bold;
-        }
-        
-        .status-outstanding {
-            color: #f44336;
-            font-weight: bold;
-        }
-        
-        .footer {
-            margin-top: 40px;
-            text-align: center;
-            font-size: 10px;
-            color: #666;
-            border-top: 1px solid #ddd;
-            padding-top: 20px;
-        }
-        
-        .payment-history {
-            margin-top: 10px;
-            font-size: 10px;
-        }
-        
-        .payment-history table {
-            margin-top: 5px;
-        }
-        
-        .payment-history th,
-        .payment-history td {
-            padding: 4px;
-            font-size: 10px;
+        /* Responsive adjustments for different paper sizes */
+        @media print and (max-width: 60mm) {
+            .print-content { padding: 1mm; }
+            .text-xl { font-size: 14px; font-weight: 900; }
+            .text-lg { font-size: 12px; font-weight: 800; }
+            body { font-size: 10px; font-weight: 600; }
+            .logo { max-width: 100px; max-height: 100px; }
+            .business-name { font-size: 22px; }
+            .item-table th, .item-table td { font-size: 10px; padding: 4px 2px; }
+            .total-row { font-size: 10px; }
+            .final-total { font-size: 13px; }
         }
     </style>
 </head>
 <body>
-    <div class="header">
-        <div class="business-name">${businessInfo.name}</div>
-        <div class="business-info">${businessInfo.address}</div>
-        <div class="business-info">${businessInfo.city}, ${businessInfo.state} ${businessInfo.zipCode}</div>
-        <div class="business-info">Phone: ${businessInfo.phone} | Email: ${businessInfo.email}</div>
-        ${businessInfo.website ? `<div class="business-info">Website: ${businessInfo.website}</div>` : ''}
-    </div>
-    
-    <div class="statement-title">Customer Debt Statement</div>
-    
-    <div class="customer-info">
-        <h3>Customer Information</h3>
-        <div class="info-row">
-            <span><strong>Name:</strong> ${customer.name}</span>
-            <span><strong>Customer ID:</strong> ${customer.id.slice(-8).toUpperCase()}</span>
+    <div class="print-content">
+        <div class="header-section text-center">
+            ${businessInfo.logo ? `<img src="${businessInfo.logo}" alt="Logo" class="logo">` : ''}
+            <div class="business-name">${businessInfo.name}</div>
+            <div class="business-info">${businessInfo.address}</div>
+            <div class="business-info">${businessInfo.city}, ${businessInfo.state} ${businessInfo.zipCode}</div>
+            <div class="business-info">Phone: ${businessInfo.phone}</div>
+            <div class="business-info">Email: ${businessInfo.email}</div>
+            ${businessInfo.website ? `<div class="business-info">Website: ${businessInfo.website}</div>` : ''}
         </div>
-        <div class="info-row">
-            <span><strong>Phone:</strong> ${customer.phone || 'N/A'}</span>
-            <span><strong>Email:</strong> ${customer.email || 'N/A'}</span>
+        
+        <div class="separator"></div>
+        
+        <div class="text-center text-lg font-extra-bold uppercase mb-2">Customer Debt Statement</div>
+        
+        <div class="separator"></div>
+        
+        <div class="transaction-info">
+            <div class="transaction-row">
+                <span class="font-bold">Customer:</span>
+                <span class="font-bold">${customer.name}</span>
+            </div>
+            <div class="transaction-row">
+                <span>Customer ID:</span>
+                <span>${customer.id.slice(-8).toUpperCase()}</span>
+            </div>
+            <div class="transaction-row">
+                <span>Phone:</span>
+                <span>${customer.phone || 'N/A'}</span>
+            </div>
+            <div class="transaction-row">
+                <span>Email:</span>
+                <span>${customer.email || 'N/A'}</span>
+            </div>
+            <div class="transaction-row">
+                <span>Address:</span>
+                <span>${customer.address || 'N/A'}</span>
+            </div>
+            <div class="transaction-row">
+                <span>Statement Date:</span>
+                <span>${format(currentDate, 'MMM dd, yyyy')}</span>
+            </div>
         </div>
-        <div class="info-row">
-            <span><strong>Address:</strong> ${customer.address || 'N/A'}</span>
-            <span><strong>Statement Date:</strong> ${format(currentDate, 'MMM dd, yyyy')}</span>
+        
+        <div class="separator"></div>
+        
+        <div class="totals-section">
+            <div class="total-row">
+                <span>Total Outstanding:</span>
+                <span class="price-text">${systemSettings.currencySymbol}${formatAmount(totalOutstanding)}</span>
+            </div>
+            <div class="total-row">
+                <span>Total Paid:</span>
+                <span class="price-text">${systemSettings.currencySymbol}${formatAmount(totalPaid)}</span>
+            </div>
+            <div class="total-row">
+                <span>Debt Records:</span>
+                <span>${debtHistory.length}</span>
+            </div>
         </div>
-    </div>
-    
-    <div class="summary">
-        <div class="summary-row">
-            <span>Total Outstanding:</span>
-            <span class="outstanding">${systemSettings.currencySymbol}${formatAmount(totalOutstanding)}</span>
-        </div>
-        <div class="summary-row">
-            <span>Total Paid:</span>
-            <span>${systemSettings.currencySymbol}${formatAmount(totalPaid)}</span>
-        </div>
-        <div class="summary-row">
-            <span>Number of Debt Records:</span>
-            <span>${debtHistory.length}</span>
-        </div>
-    </div>
-    
-    <h3>Debt History</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>Date Created</th>
-                <th>Original Amount</th>
-                <th>Amount Owed</th>
-                <th>Due Date</th>
-                <th>Status</th>
-                <th>Payments</th>
-            </tr>
-        </thead>
-        <tbody>
-            ${debtHistory.map(debt => `
+        
+        <div class="separator"></div>
+        
+        <div class="text-center text-sm font-bold mb-2">DEBT HISTORY</div>
+        
+        <table class="item-table">
+            <thead>
                 <tr>
-                    <td>${format(new Date(debt.created_at), 'MMM dd, yyyy')}</td>
-                    <td class="amount">${systemSettings.currencySymbol}${formatAmount(debt.sale_amount || debt.amount_owed)}</td>
-                    <td class="amount">${systemSettings.currencySymbol}${formatAmount(debt.amount_owed)}</td>
-                    <td>${format(new Date(debt.due_date), 'MMM dd, yyyy')}</td>
-                    <td class="${debt.is_paid ? 'status-paid' : 'status-outstanding'}">
-                        ${debt.is_paid ? 'PAID' : 'OUTSTANDING'}
-                    </td>
-                    <td>
-                        ${debt.payments && debt.payments.length > 0 ? `
-                            <div class="payment-history">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th>Date</th>
-                                            <th>Amount</th>
-                                            <th>Method</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        ${debt.payments.map(payment => `
-                                            <tr>
-                                                <td>${format(new Date(payment.payment_date), 'MMM dd')}</td>
-                                                <td>${systemSettings.currencySymbol}${formatAmount(payment.amount_paid)}</td>
-                                                <td>${payment.payment_method.toUpperCase()}</td>
-                                            </tr>
-                                        `).join('')}
-                                    </tbody>
-                                </table>
-                            </div>
-                        ` : 'No payments'}
-                    </td>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>Due Date</th>
+                    <th>Status</th>
                 </tr>
-            `).join('')}
-        </tbody>
-    </table>
-    
-    <div class="footer">
-        <p>This statement was generated on ${format(currentDate, 'MMM dd, yyyy')} at ${format(currentDate, 'HH:mm:ss')}</p>
-        <p>${receiptSettings.footerText}</p>
-        <p>For any queries regarding this statement, please contact us at ${businessInfo.phone} or ${businessInfo.email}</p>
+            </thead>
+            <tbody>
+                ${debtHistory.map(debt => {
+                    const isOverdue = !debt.is_paid && new Date(debt.due_date) < new Date();
+                    return `
+                        <tr>
+                            <td class="text-xs">${format(new Date(debt.created_at), 'MMM dd, yyyy')}</td>
+                            <td class="text-xs text-right price-text">${systemSettings.currencySymbol}${formatAmount(debt.amount_owed)}</td>
+                            <td class="text-xs">${format(new Date(debt.due_date), 'MMM dd, yyyy')}</td>
+                            <td class="text-xs font-bold">
+                                ${debt.is_paid ? 'PAID' : isOverdue ? 'OVERDUE' : 'PENDING'}
+                            </td>
+                        </tr>
+                        ${debt.payments && debt.payments.length > 0 ? debt.payments.map(payment => `
+                            <tr>
+                                <td class="text-xs" style="padding-left: 8px;">Payment: ${format(new Date(payment.payment_date), 'MMM dd')}</td>
+                                <td class="text-xs text-right price-text">-${systemSettings.currencySymbol}${formatAmount(payment.amount_paid)}</td>
+                                <td class="text-xs">${payment.payment_method.toUpperCase()}</td>
+                                <td class="text-xs">PAID</td>
+                            </tr>
+                        `).join('') : ''}
+                    `;
+                }).join('')}
+            </tbody>
+        </table>
+        
+        ${totalOutstanding > 0 ? `
+            <div class="outstanding">
+                <div class="flex justify-between">
+                    <span class="font-extra-bold">TOTAL OUTSTANDING:</span>
+                    <span class="font-extra-bold price-text">${systemSettings.currencySymbol}${formatAmount(totalOutstanding)}</span>
+                </div>
+            </div>
+        ` : ''}
+        
+        <div class="footer-section">
+            <div class="text-xs">${receiptSettings.footerText}</div>
+            <div class="text-xs mt-2">Generated: ${format(currentDate, 'MMM dd, yyyy HH:mm:ss')}</div>
+            <div class="text-xs">Contact: ${businessInfo.phone} | ${businessInfo.email}</div>
+        </div>
+        
+        <div class="cut-line">✂ - - - - - - - - - - - - - - - - - - - - - - ✂</div>
     </div>
 </body>
 </html>
@@ -970,349 +1096,297 @@ export const stockInventoryHtml = (
       <title>Stock Inventory Report</title>
       <style>
         @page {
-          size: A4;
-          margin: 20mm;
+          size: 80mm auto;
+          margin: 0;
         }
         
-        * {
-          margin: 0;
-          padding: 0;
-          box-sizing: border-box;
+        @media print {
+          body { margin: 0; }
+          .no-print { display: none; }
         }
         
         body {
-          font-family: 'Arial', sans-serif;
-          font-size: 12px;
-          line-height: 1.4;
-          color: #333;
+          font-family: 'Tahoma', Arial, sans-serif;
+          font-size: 10px;
+          line-height: 1.2;
+          color: #000;
+          margin: 0;
+          padding: 4px;
+          width: 72mm;
           background: white;
         }
         
-        .container {
-          max-width: 100%;
-          margin: 0 auto;
-          padding: 20px;
+        .print-content {
+          width: 100%;
+          margin: 0;
+          padding: 0;
         }
         
-        .header {
+        .text-center { text-align: center; }
+        .text-left { text-align: left; }
+        .text-right { text-align: right; }
+        .text-xs { font-size: 8px; }
+        .text-sm { font-size: 9px; }
+        .text-lg { font-size: 12px; }
+        .font-bold { font-weight: bold; }
+        .font-extra-bold { font-weight: 900; }
+        .uppercase { text-transform: uppercase; }
+        .mb-1 { margin-bottom: 2px; }
+        .mb-2 { margin-bottom: 4px; }
+        .mt-2 { margin-top: 4px; }
+        .flex { display: flex; }
+        .justify-between { justify-content: space-between; }
+        
+        .header-section {
           text-align: center;
-          margin-bottom: 30px;
-          border-bottom: 2px solid #2563eb;
-          padding-bottom: 20px;
-        }
-        
-        .logo {
-          max-width: 80px;
-          max-height: 80px;
-          margin: 0 auto 15px;
-          display: block;
-        }
-        
-        .business-name {
-          font-size: 24px;
-          font-weight: bold;
-          color: #2563eb;
           margin-bottom: 8px;
         }
         
+        .logo {
+          max-width: 40mm;
+          max-height: 15mm;
+          margin: 0 auto 4px;
+        }
+        
+        .business-name {
+          font-size: 12px;
+          font-weight: 900;
+          text-transform: uppercase;
+          margin-bottom: 2px;
+          line-height: 1.1;
+        }
+        
         .business-info {
-          font-size: 11px;
-          color: #666;
-          line-height: 1.5;
+          font-size: 8px;
+          line-height: 1.2;
+          margin-bottom: 1px;
         }
         
-        .report-title {
-          font-size: 20px;
-          font-weight: bold;
-          text-align: center;
-          margin: 20px 0;
-          color: #1f2937;
+        .separator {
+          border-top: 1px dashed #000;
+          margin: 4px 0;
         }
         
-        .report-meta {
+        .transaction-info {
+          margin: 4px 0;
+        }
+        
+        .transaction-row {
           display: flex;
           justify-content: space-between;
-          margin-bottom: 20px;
-          padding: 15px;
-          background-color: #f8fafc;
-          border-radius: 8px;
-          border: 1px solid #e2e8f0;
+          margin-bottom: 1px;
+          font-size: 8px;
         }
         
-        .meta-item {
-          text-align: center;
+        .item-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 4px 0;
         }
         
-        .meta-label {
-          font-size: 10px;
-          color: #64748b;
-          text-transform: uppercase;
-          font-weight: 600;
-          margin-bottom: 4px;
+        .item-table th,
+        .item-table td {
+          padding: 1px 2px;
+          text-align: left;
+          border: none;
+          font-size: 8px;
+          line-height: 1.1;
         }
         
-        .meta-value {
-          font-size: 14px;
+        .item-table th {
           font-weight: bold;
-          color: #1f2937;
+          border-bottom: 1px solid #000;
         }
         
-        .summary-section {
-          margin-bottom: 25px;
+        .price-text {
+          font-family: 'Courier New', monospace;
+          font-weight: bold;
+        }
+        
+        .totals-section {
+          margin-top: 4px;
+          border-top: 1px dashed #000;
+          padding-top: 4px;
+        }
+        
+        .total-row {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 1px;
+          font-size: 9px;
+        }
+        
+        .grand-total {
+          border-top: 1px solid #000;
+          border-bottom: 1px double #000;
+          padding: 2px 0;
+          margin-top: 2px;
+          font-weight: bold;
+          font-size: 10px;
+        }
+        
+        .footer-section {
+          text-align: center;
+          margin-top: 8px;
+          font-size: 7px;
+          line-height: 1.2;
+        }
+        
+        .cut-line {
+          text-align: center;
+          margin: 8px 0 4px;
+          font-size: 8px;
+          color: #666;
         }
         
         .summary-grid {
           display: grid;
-          grid-template-columns: repeat(3, 1fr);
-          gap: 15px;
-          margin-bottom: 20px;
+          grid-template-columns: 1fr 1fr;
+          gap: 4px;
+          margin: 4px 0;
+          font-size: 8px;
         }
         
-        .summary-card {
-          padding: 15px;
-          border-radius: 8px;
+        .summary-item {
           text-align: center;
-          border: 1px solid #e2e8f0;
+          padding: 2px;
+          border: 1px solid #000;
         }
         
-        .summary-card.total {
-          background-color: #dbeafe;
-          border-color: #2563eb;
+        .low-stock {
+          background-color: #fff3cd;
+          color: #856404;
         }
         
-        .summary-card.value {
-          background-color: #dcfce7;
-          border-color: #16a34a;
-        }
-        
-        .summary-card.low-stock {
-          background-color: #fef3c7;
-          border-color: #d97706;
-        }
-        
-        .summary-title {
-          font-size: 11px;
-          color: #64748b;
-          text-transform: uppercase;
-          font-weight: 600;
-          margin-bottom: 5px;
-        }
-        
-        .summary-number {
-          font-size: 18px;
-          font-weight: bold;
-        }
-        
-        .table-container {
-          margin-bottom: 20px;
-          border: 1px solid #e2e8f0;
-          border-radius: 8px;
-          overflow: hidden;
-        }
-        
-        table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 11px;
-        }
-        
-        th {
-          background-color: #f1f5f9;
-          color: #374151;
-          font-weight: 600;
-          padding: 12px 8px;
-          text-align: left;
-          border-bottom: 2px solid #e2e8f0;
-          font-size: 10px;
-          text-transform: uppercase;
-        }
-        
-        td {
-          padding: 10px 8px;
-          border-bottom: 1px solid #f1f5f9;
-        }
-        
-        tr:nth-child(even) {
-          background-color: #fafafa;
-        }
-        
-        tr:hover {
-          background-color: #f0f9ff;
-        }
-        
-        .product-name {
-          font-weight: 600;
-          color: #1f2937;
-        }
-        
-        .category {
-          color: #6b7280;
-          font-style: italic;
-        }
-        
-        .price {
-          text-align: right;
-          font-weight: 500;
-        }
-        
-        .quantity {
-          text-align: center;
-          font-weight: 600;
-        }
-        
-        .low-stock-indicator {
-          background-color: #fef3c7;
-          color: #92400e;
-          padding: 2px 6px;
-          border-radius: 4px;
-          font-size: 9px;
-          font-weight: 600;
-          text-transform: uppercase;
-        }
-        
-        .footer {
-          margin-top: 30px;
-          padding-top: 20px;
-          border-top: 1px solid #e2e8f0;
-          text-align: center;
-          color: #6b7280;
-          font-size: 10px;
-        }
-        
-        .generated-info {
-          margin-top: 10px;
-          font-size: 9px;
-          color: #9ca3af;
-        }
-        
-        @media print {
-          .container {
-            padding: 0;
-          }
-          
-          body {
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
+        .out-of-stock {
+          background-color: #f8d7da;
+          color: #721c24;
         }
       </style>
     </head>
     <body>
-      <div class="container">
-        <div class="header">
+      <div class="print-content">
+        <div class="header-section">
           ${settings.businessInfo.logo ? `<img src="${settings.businessInfo.logo}" alt="Logo" class="logo">` : ''}
-          <div class="business-name">${settings.businessInfo.name}</div>
-          <div class="business-info">
+          <div class="business-name text-center">${settings.businessInfo.name}</div>
+          <div class="business-info text-center">
             ${settings.businessInfo.address}<br>
             ${settings.businessInfo.city}, ${settings.businessInfo.state} ${settings.businessInfo.zipCode}<br>
-            Phone: ${settings.businessInfo.phone} | Email: ${settings.businessInfo.email}
-            ${settings.businessInfo.website ? `<br>Website: ${settings.businessInfo.website}` : ''}
+            ${settings.businessInfo.phone} | ${settings.businessInfo.email}
+            ${settings.businessInfo.website ? `<br>${settings.businessInfo.website}` : ''}
           </div>
         </div>
         
-        <div class="report-title">Stock Inventory Report</div>
+        <div class="separator"></div>
         
-        <div class="report-meta">
-          <div class="meta-item">
-            <div class="meta-label">Report Date</div>
-            <div class="meta-value">${formattedDate}</div>
+        <div class="text-center text-lg font-extra-bold uppercase mb-2">STOCK INVENTORY</div>
+        
+        <div class="transaction-info">
+          <div class="transaction-row">
+            <span>Date:</span>
+            <span>${formattedDate}</span>
           </div>
-          <div class="meta-item">
-            <div class="meta-label">Report Time</div>
-            <div class="meta-value">${formattedTime}</div>
-          </div>
-          <div class="meta-item">
-            <div class="meta-label">Currency</div>
-            <div class="meta-value">${settings.systemSettings.currencySymbol}</div>
+          <div class="transaction-row">
+            <span>Time:</span>
+            <span>${formattedTime}</span>
           </div>
         </div>
         
-        <div class="summary-section">
-          <div class="summary-grid">
-            <div class="summary-card total">
-              <div class="summary-title">Total Products</div>
-              <div class="summary-number">${totalProducts}</div>
-            </div>
-            <div class="summary-card value">
-              <div class="summary-title">Total Inventory Value</div>
-              <div class="summary-number">${formatCurrency(totalValue, settings.systemSettings)}</div>
-            </div>
-            <div class="summary-card low-stock">
-              <div class="summary-title">Low Stock Items</div>
-              <div class="summary-number">${lowStockItems.length}</div>
-            </div>
+        <div class="separator"></div>
+        
+        <div class="summary-grid">
+          <div class="summary-item">
+            <div class="text-xs font-bold">TOTAL PRODUCTS</div>
+            <div class="font-extra-bold">${totalProducts}</div>
+          </div>
+          <div class="summary-item">
+            <div class="text-xs font-bold">TOTAL VALUE</div>
+            <div class="font-extra-bold price-text">${formatCurrency(totalValue, settings.systemSettings)}</div>
+          </div>
+          <div class="summary-item">
+            <div class="text-xs font-bold">LOW STOCK</div>
+            <div class="font-extra-bold">${lowStockItems.length}</div>
+          </div>
+          <div class="summary-item">
+            <div class="text-xs font-bold">CURRENCY</div>
+            <div class="font-extra-bold">${settings.systemSettings.currencySymbol}</div>
           </div>
         </div>
         
-        <div class="table-container">
-          <table>
+        <div class="separator"></div>
+        
+        <table class="item-table">
+          <thead>
+            <tr>
+              <th>Product</th>
+              <th>Qty</th>
+              <th>Price</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${products.map(product => {
+              const stockValue = product.selling_price * product.quantity_on_hand;
+              const isLowStock = product.quantity_on_hand <= product.reorder_level;
+              
+              return `
+                <tr ${isLowStock ? 'class="low-stock"' : ''}>
+                  <td class="text-xs">
+                    ${product.name}<br>
+                    <span style="color: #666; font-style: italic;">${product.category}</span>
+                  </td>
+                  <td class="text-xs text-center">${product.quantity_on_hand}${isLowStock ? ' ⚠️' : ''}</td>
+                  <td class="text-xs text-right price-text">${formatCurrency(product.selling_price, settings.systemSettings)}</td>
+                  <td class="text-xs text-right price-text">${formatCurrency(stockValue, settings.systemSettings)}</td>
+                </tr>
+              `;
+            }).join('')}
+          </tbody>
+        </table>
+        
+        ${lowStockItems.length > 0 ? `
+          <div class="separator"></div>
+          
+          <div class="text-center text-sm font-bold mb-2">⚠️ LOW STOCK ALERT</div>
+          
+          <table class="item-table">
             <thead>
               <tr>
-                <th>Product Name</th>
-                <th>Category</th>
-                <th>Cost Price</th>
-                <th>Selling Price</th>
-                <th>Qty on Hand</th>
-                <th>Stock Value</th>
-                <th>Status</th>
+                <th>Product</th>
+                <th>Current</th>
+                <th>Reorder</th>
               </tr>
             </thead>
             <tbody>
-              ${products.map(product => {
-                const stockValue = product.selling_price * product.quantity_on_hand;
-                const isLowStock = product.quantity_on_hand <= product.reorder_level;
-                
+              ${lowStockItems.map(product => {
                 return `
-                  <tr>
-                    <td class="product-name">${product.name}</td>
-                    <td class="category">${product.category}</td>
-                    <td class="price">${formatCurrency(product.cost_price, settings.systemSettings)}</td>
-                    <td class="price">${formatCurrency(product.selling_price, settings.systemSettings)}</td>
-                    <td class="quantity">${product.quantity_on_hand}</td>
-                    <td class="price">${formatCurrency(stockValue, settings.systemSettings)}</td>
-                    <td>
-                      ${isLowStock ? '<span class="low-stock-indicator">Low Stock</span>' : '<span style="color: #16a34a; font-weight: 600;">In Stock</span>'}
-                    </td>
+                  <tr class="low-stock">
+                    <td class="text-xs">${product.name}</td>
+                    <td class="text-xs text-center">${product.quantity_on_hand}</td>
+                    <td class="text-xs text-center">${product.reorder_level}</td>
                   </tr>
                 `;
               }).join('')}
             </tbody>
           </table>
-        </div>
-        
-        ${lowStockItems.length > 0 ? `
-          <div class="table-container">
-            <h3 style="margin-bottom: 15px; color: #d97706; font-size: 16px;">⚠️ Low Stock Alert</h3>
-            <table>
-              <thead>
-                <tr>
-                  <th>Product Name</th>
-                  <th>Current Stock</th>
-                  <th>Shortage</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${lowStockItems.map(product => {
-                  const shortage = product.reorder_level - product.quantity_on_hand;
-                  return `
-                    <tr>
-                      <td class="product-name">${product.name}</td>
-                      <td class="quantity">${product.quantity_on_hand}</td>
-                      <td class="quantity" style="color: #dc2626; font-weight: 600;">${shortage > 0 ? shortage : 0}</td>
-                    </tr>
-                  `;
-                }).join('')}
-              </tbody>
-            </table>
-          </div>
         ` : ''}
         
-        <div class="footer">
-          <div>${settings.receiptSettings.footerText}</div>
-          <div class="generated-info">
-            Report generated on ${formattedDate} at ${formattedTime}
+        <div class="totals-section">
+          <div class="grand-total">
+            <div class="flex justify-between">
+              <span class="font-extra-bold">TOTAL INVENTORY VALUE:</span>
+              <span class="font-extra-bold price-text">${formatCurrency(totalValue, settings.systemSettings)}</span>
+            </div>
           </div>
         </div>
+        
+        <div class="footer-section">
+          <div class="text-xs">${settings.receiptSettings.footerText}</div>
+          <div class="text-xs mt-2">Generated: ${formattedDate} ${formattedTime}</div>
+          <div class="text-xs">Contact: ${settings.businessInfo.phone} | ${settings.businessInfo.email}</div>
+        </div>
+        
+        <div class="cut-line">✂ - - - - - - - - - - - - - - - - - - - - - - ✂</div>
       </div>
     </body>
     </html>
@@ -1393,211 +1467,259 @@ export const profitReportHtml = (
     <title>Profit Report - ${periodLabel}</title>
     <style>
         @page {
-          font-family: Tahoma;
-          size: A4;
-          margin: 20mm;
-          padding: 0;
+            size: 80mm auto;
+            margin: 0;
         }
         
         @media print {
-            @page {
-                font-family: Tahoma;
-                font-style: normal;
-                margin: 20mm;
-                padding: 0;
-                size: A4;
-            }
-            
-            body {
-                font-size: 12px;
-                line-height: 1.4;
-                width: 100%;
-                height: 100%;
-                margin: 0;
-                padding: 0;
+            body { 
+                margin: 0; 
                 -webkit-print-color-adjust: exact;
                 color-adjust: exact;
-                color: black;
             }
-
-            .print-content {
-                width: 100%;
-                height: auto;
-                padding: 0;
-                box-sizing: border-box;
-                margin: 0;
-            }
-            
-            * {
-                -webkit-box-sizing: border-box;
-                box-sizing: border-box;
-            }
+            .no-print { display: none; }
         }
-
+        
         body {
-            font-family: Tahoma;
-            font-size: 12px;
-            line-height: 1.4;
+            font-family: 'Tahoma', 'Arial', sans-serif;
+            font-size: 11px;
+            line-height: 1.3;
+            color: #000;
             margin: 0;
-            padding: 20px;
-            color: black;
-            background: white;
+            padding: 8px;
+            width: 80mm;
+            box-sizing: border-box;
         }
-
+        
         .print-content {
-            max-width: 100%;
-            margin: 0 auto;
+            width: 100%;
+            max-width: 80mm;
         }
         
         .text-center { text-align: center; }
-        .text-right { text-align: right; }
         .text-left { text-align: left; }
-        .space-y-1 > * + * { margin-top: 0.25rem; }
-        .space-y-2 > * + * { margin-top: 0.5rem; }
-        .space-y-4 > * + * { margin-top: 1rem; }
-        .mb-2 { margin-bottom: 0.5rem; }
-        .mb-4 { margin-bottom: 1rem; }
-        .mb-6 { margin-bottom: 1.5rem; }
-        .mt-4 { margin-top: 1rem; }
+        .text-right { text-align: right; }
+        .text-lg { font-size: 13px; }
+        .text-sm { font-size: 10px; }
+        .text-xs { font-size: 9px; }
         .font-bold { font-weight: bold; }
-        .text-lg { font-size: 1.125rem; }
-        .text-xl { font-size: 1.25rem; }
-        .text-2xl { font-size: 1.5rem; }
-        .text-green { color: #16a34a; }
-        .text-red { color: #dc2626; }
-        .border { border: 1px solid #ddd; }
-        .border-collapse { border-collapse: collapse; }
-        .w-full { width: 100%; }
-        .p-2 { padding: 0.5rem; }
-        .p-4 { padding: 1rem; }
-        .bg-gray { background-color: #f5f5f5; }
+        .font-extra-bold { font-weight: 900; }
+        .uppercase { text-transform: uppercase; }
+        .mb-1 { margin-bottom: 2px; }
+        .mb-2 { margin-bottom: 4px; }
+        .mb-3 { margin-bottom: 6px; }
+        .mt-2 { margin-top: 4px; }
+        .mt-3 { margin-top: 6px; }
+        .py-1 { padding-top: 2px; padding-bottom: 2px; }
+        .px-1 { padding-left: 2px; padding-right: 2px; }
+        
+        .separator {
+            border-top: 1px dashed #000;
+            margin: 6px 0;
+            height: 1px;
+        }
+        
+        .header-section {
+            margin-bottom: 8px;
+        }
+        
+        .logo {
+            max-width: 60px;
+            max-height: 60px;
+            margin: 0 auto 4px;
+            display: block;
+        }
+        
+        .business-name {
+            font-size: 14px;
+            font-weight: 900;
+            margin-bottom: 2px;
+        }
+        
+        .business-info {
+            font-size: 9px;
+            line-height: 1.2;
+            margin-bottom: 2px;
+        }
+        
+        .transaction-info {
+            margin: 6px 0;
+        }
+        
+        .transaction-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 1px;
+            font-size: 10px;
+        }
+        
+        .summary-grid {
+            margin: 6px 0;
+        }
+        
+        .summary-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2px;
+            font-size: 10px;
+        }
+        
+        .summary-label {
+            font-weight: bold;
+        }
+        
+        .summary-value {
+            font-weight: bold;
+        }
+        
+        .positive { color: #000; }
+        .negative { color: #000; }
         
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 1rem;
-        }
-        
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
+            margin: 4px 0;
+            font-size: 9px;
         }
         
         th {
-            background-color: #f5f5f5;
+            background-color: #f0f0f0;
+            font-weight: bold;
+            padding: 2px 1px;
+            text-align: left;
+            border-bottom: 1px solid #000;
+            font-size: 8px;
+        }
+        
+        td {
+            padding: 1px;
+            border-bottom: 1px dotted #ccc;
+            vertical-align: top;
+        }
+        
+        .totals-section {
+            margin-top: 6px;
+            border-top: 1px solid #000;
+            padding-top: 4px;
+        }
+        
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 2px;
             font-weight: bold;
         }
         
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
-        }
-        
-        .metric-card {
-            border: 1px solid #ddd;
-            padding: 1rem;
-            border-radius: 8px;
-            background: #f9f9f9;
-        }
-        
-        .metric-title {
-            font-size: 12px;
-            color: #666;
-            margin-bottom: 0.25rem;
-        }
-        
-        .metric-value {
-            font-size: 16px;
+        .price-text {
+            font-family: 'Courier New', monospace;
             font-weight: bold;
         }
         
-        .section-title {
-            font-size: 16px;
-            font-weight: bold;
-            margin: 1.5rem 0 0.5rem 0;
-            border-bottom: 1px solid #ddd;
-            padding-bottom: 0.25rem;
-        }
-        
-        .header {
+        .footer {
+            margin-top: 8px;
             text-align: center;
-            margin-bottom: 2rem;
-            border-bottom: 2px solid #ddd;
-            padding-bottom: 1rem;
+            font-size: 8px;
+            line-height: 1.2;
         }
         
-        .business-info {
-            margin-bottom: 1rem;
+        .cut-line {
+            text-align: center;
+            margin: 8px 0 4px;
+            font-size: 8px;
+            letter-spacing: 2px;
         }
+        
     </style>
 </head>
 <body>
     <div class="print-content">
-        <div class="header">
-            <div class="business-info">
-                <div class="text-2xl font-bold">${businessInfo.name}</div>
-                <div>${businessInfo.address}</div>
-                <div>${businessInfo.city}, ${businessInfo.state} ${businessInfo.zipCode}</div>
-                <div>Phone: ${businessInfo.phone}</div>
-                <div>Email: ${businessInfo.email}</div>
-                ${businessInfo.website ? `<div>Website: ${businessInfo.website}</div>` : ''}
-            </div>
-            <div class="text-xl font-bold mt-4">Profit Report - ${periodLabel}</div>
-            <div>Generated on ${new Date().toLocaleDateString()}</div>
+        <!-- Header Section -->
+        <div class="header-section text-center">
+            ${businessInfo.logo ? `<img src="${businessInfo.logo}" alt="Logo" class="logo">` : ''}
+            <div class="business-name text-lg font-extra-bold uppercase mb-2">${businessInfo.name}</div>
+            <div class="business-info text-xs mb-1">${businessInfo.address}</div>
+            <div class="business-info text-xs mb-1">${businessInfo.city}, ${businessInfo.state} ${businessInfo.zipCode}</div>
+            <div class="business-info text-xs mb-1">Tel: ${businessInfo.phone}</div>
+            ${businessInfo.email ? `<div class="business-info text-xs mb-1">Email: ${businessInfo.email}</div>` : ''}
+            ${businessInfo.website ? `<div class="business-info text-xs mb-2">Web: ${businessInfo.website}</div>` : ''}
         </div>
-
-        <!-- Key Metrics -->
-        <div class="section-title">Financial Summary</div>
-        <div class="metrics-grid">
-            <div class="metric-card">
-                <div class="metric-title">Total Revenue</div>
-                <div class="metric-value">${formatCurrency(profitData.totalRevenue)}</div>
+        
+        <div class="separator"></div>
+        
+        <!-- Report Title -->
+        <div class="text-center mb-3">
+            <div class="text-lg font-bold uppercase">PROFIT REPORT</div>
+            <div class="text-sm">${periodLabel}</div>
+            <div class="text-xs">Generated: ${new Date().toLocaleDateString()}</div>
+        </div>
+        
+        <div class="separator"></div>
+        
+        <!-- Transaction Info -->
+        <div class="transaction-info">
+            <div class="transaction-row">
+                <span>Report Period:</span>
+                <span class="price-text">${periodLabel}</span>
             </div>
-            <div class="metric-card">
-                <div class="metric-title">Total Cost</div>
-                <div class="metric-value text-red">${formatCurrency(profitData.totalCost)}</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-title">Gross Profit</div>
-                <div class="metric-value ${profitData.grossProfit >= 0 ? 'text-green' : 'text-red'}">${formatCurrency(profitData.grossProfit)}</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-title">Total Expenses</div>
-                <div class="metric-value text-red">${formatCurrency(profitData.totalExpenses)}</div>
-            </div>
-            <div class="metric-card">
-                <div class="metric-title">Net Profit</div>
-                <div class="metric-value ${profitData.netProfit >= 0 ? 'text-green' : 'text-red'}">${formatCurrency(profitData.netProfit)}</div>
-                <div style="font-size: 10px; color: #666;">Margin: ${formatPercentage(profitData.profitMargin)}</div>
+            <div class="transaction-row">
+                <span>Generated:</span>
+                <span>${new Date().toLocaleDateString()}</span>
             </div>
         </div>
+        
+        <div class="separator"></div>
+        
+        <!-- Financial Summary -->
+        <div class="text-center text-sm font-bold mb-2 uppercase">FINANCIAL SUMMARY</div>
+        <div class="summary-grid">
+            <div class="summary-item">
+                <span class="summary-label">Total Revenue:</span>
+                <span class="summary-value price-text">${formatCurrency(profitData.totalRevenue)}</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Total Cost:</span>
+                <span class="summary-value price-text">${formatCurrency(profitData.totalCost)}</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Gross Profit:</span>
+                <span class="summary-value price-text">${formatCurrency(profitData.grossProfit)}</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Total Expenses:</span>
+                <span class="summary-value price-text">${formatCurrency(profitData.totalExpenses)}</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Net Profit:</span>
+                <span class="summary-value price-text">${formatCurrency(profitData.netProfit)}</span>
+            </div>
+            <div class="summary-item">
+                <span class="summary-label">Profit Margin:</span>
+                <span class="summary-value">${formatPercentage(profitData.profitMargin)}</span>
+            </div>
+        </div>
 
+        
         ${dailyBreakdown.length > 0 ? `
+        <div class="separator"></div>
+        
         <!-- Daily Breakdown -->
-        <div class="section-title">Daily Breakdown</div>
+        <div class="text-center text-sm font-bold mb-2 uppercase">DAILY BREAKDOWN</div>
         <table>
             <thead>
                 <tr>
                     <th>Date</th>
                     <th>Revenue</th>
                     <th>Cost</th>
-                    <th>Gross Profit</th>
-                    <th>Expenses</th>
-                    <th>Net Profit</th>
+                    <th>Profit</th>
                 </tr>
             </thead>
             <tbody>
                 ${dailyBreakdown.map(day => `
                 <tr>
                     <td>${new Date(day.date).toLocaleDateString()}</td>
-                    <td>${formatCurrency(day.revenue)}</td>
-                    <td class="text-red">${formatCurrency(day.cost)}</td>
-                    <td class="${day.grossProfit >= 0 ? 'text-green' : 'text-red'}">${formatCurrency(day.grossProfit)}</td>
-                    <td class="text-red">${formatCurrency(day.expenses)}</td>
-                    <td class="${day.netProfit >= 0 ? 'text-green' : 'text-red'}">${formatCurrency(day.netProfit)}</td>
+                    <td class="price-text">${formatCurrency(day.revenue)}</td>
+                    <td class="price-text">${formatCurrency(day.cost)}</td>
+                    <td class="price-text">${formatCurrency(day.netProfit)}</td>
                 </tr>
                 `).join('')}
             </tbody>
@@ -1605,17 +1727,17 @@ export const profitReportHtml = (
         ` : ''}
 
         ${productProfitability.length > 0 ? `
+        <div class="separator"></div>
+        
         <!-- Product Profitability -->
-        <div class="section-title">Product Profitability</div>
+        <div class="text-center text-sm font-bold mb-2 uppercase">PRODUCT PROFITABILITY</div>
         <table>
             <thead>
                 <tr>
                     <th>Product</th>
-                    <th>Qty Sold</th>
+                    <th>Qty</th>
                     <th>Revenue</th>
-                    <th>Cost</th>
-                    <th>Gross Profit</th>
-                    <th>Profit Margin</th>
+                    <th>Profit</th>
                 </tr>
             </thead>
             <tbody>
@@ -1623,20 +1745,35 @@ export const profitReportHtml = (
                 <tr>
                     <td>${product.productName}</td>
                     <td>${product.quantitySold}</td>
-                    <td>${formatCurrency(product.totalRevenue)}</td>
-                    <td class="text-red">${formatCurrency(product.totalCost)}</td>
-                    <td class="${product.grossProfit >= 0 ? 'text-green' : 'text-red'}">${formatCurrency(product.grossProfit)}</td>
-                    <td class="${product.profitMargin >= 0 ? 'text-green' : 'text-red'}">${formatPercentage(product.profitMargin)}</td>
+                    <td class="price-text">${formatCurrency(product.totalRevenue)}</td>
+                    <td class="price-text">${formatCurrency(product.grossProfit)}</td>
                 </tr>
                 `).join('')}
             </tbody>
         </table>
         ` : ''}
-
-        <div class="mt-4 text-center">
-            <div>${receiptSettings.footerText}</div>
-            <div style="margin-top: 1rem; font-size: 10px; color: #666;">Report generated by ${businessInfo.name}</div>
+        
+        <!-- Totals Section -->
+        <div class="totals-section">
+            <div class="total-row">
+                <span>NET PROFIT:</span>
+                <span class="price-text">${formatCurrency(profitData.netProfit)}</span>
+            </div>
+            <div class="total-row">
+                <span>PROFIT MARGIN:</span>
+                <span class="price-text">${formatPercentage(profitData.profitMargin)}</span>
+            </div>
         </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <div class="mb-1">${receiptSettings.footerText}</div>
+            <div class="text-xs">Generated: ${new Date().toLocaleString()}</div>
+            <div class="text-xs">By: ${businessInfo.name}</div>
+            ${businessInfo.phone ? `<div class="text-xs">Tel: ${businessInfo.phone}</div>` : ''}
+        </div>
+        
+        <div class="cut-line">- - - - - - - - - - - - - - - -</div>
     </div>
 </body>
 </html>
@@ -1706,13 +1843,15 @@ export const debtorsListHtml = (
         }
         
         body {
-          font-family: 'Courier New', monospace;
-          font-size: 10px;
-          line-height: 1.2;
+          font-family: 'Tahoma', 'Arial', sans-serif;
+          font-size: 11px;
+          line-height: 1.3;
           color: #000;
           background: white;
-          width: 70mm;
+          width: 80mm;
           margin: 0 auto;
+          padding: 8px;
+          box-sizing: border-box;
         }
         
         .container {

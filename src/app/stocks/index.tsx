@@ -1,5 +1,5 @@
 import { getProducts, updateProductPrices, updateProduct } from "@/database/products";
-import { TProduct } from "@/types/database";
+import { InventoryAdjustmentType, TProduct } from "@/types/database";
 import { useEffect, useState } from "react";
 import { FaTrash, FaFileExport, FaFileImport, FaPlus, FaEye } from "react-icons/fa";
 import { Link, useNavigate } from "react-router";
@@ -34,7 +34,7 @@ export default function Stocks() {
   const isAdmin = user?.role === "admin" || user?.role === "manager";
   const [selectedProduct, setSelectedProduct] = useState<TProduct | null>(null);
   const [quantityChange, setQuantityChange] = useState<number>(0);
-  const [adjustmentType, setAdjustmentType] = useState<"add" | "remove">("add");
+  const [adjustmentType, setAdjustmentType] = useState<InventoryAdjustmentType>(InventoryAdjustmentType.INCREASE);
   const [newSellingPrice, setNewSellingPrice] = useState<number | null>(null);
   const [newCostPrice, setNewCostPrice] = useState<number | null>(null);
   const [activeTab, setActiveTab] = useState<"quantity" | "price" | "details">("details");
@@ -68,6 +68,7 @@ export default function Stocks() {
           await updateProductQuantity(
             selectedProduct!.id,
             quantityChange,
+            adjustmentType,
             adjustmentReason
           );
         }
@@ -399,22 +400,22 @@ export default function Stocks() {
                               <div className="flex space-x-2">
                                 <Button
                                   variant={
-                                    adjustmentType === "add"
+                                    adjustmentType === InventoryAdjustmentType.INCREASE
                                       ? "default"
                                       : "outline"
                                   }
-                                  onClick={() => setAdjustmentType("add")}
+                                  onClick={() => setAdjustmentType(InventoryAdjustmentType.INCREASE)}
                                   className="flex-1"
                                 >
                                   Add
                                 </Button>
                                 <Button
                                   variant={
-                                    adjustmentType === "remove"
+                                    adjustmentType === InventoryAdjustmentType.DECREASE
                                       ? "default"
                                       : "outline"
                                   }
-                                  onClick={() => setAdjustmentType("remove")}
+                                  onClick={() => setAdjustmentType(InventoryAdjustmentType.DECREASE)}
                                   className="flex-1"
                                 >
                                   Remove
@@ -428,22 +429,20 @@ export default function Stocks() {
                                 step="0.5"
                                 min="0"
                                 max={
-                                  adjustmentType === "remove"
+                                  adjustmentType === InventoryAdjustmentType.DECREASE
                                     ? selectedProduct?.quantity_on_hand
                                     : undefined
                                 }
                                 value={Math.abs(quantityChange)}
                                 onChange={(e) => {
                                   const value = parseFloat(e.target.value) || 0;
-                                  setQuantityChange(
-                                    adjustmentType === "remove" ? -value : value
-                                  );
+                                  setQuantityChange(value);
                                 }}
                                 className="text-center"
                               />
                             </div>
                             <div className="text-sm text-muted-foreground">
-                              {adjustmentType === "add" ? "Adding" : "Removing"}{" "}
+                              {adjustmentType === InventoryAdjustmentType.INCREASE ? "Adding" : "Removing"}{" "}
                               {Math.abs(quantityChange)} units
                             </div>
                           </TabsContent>

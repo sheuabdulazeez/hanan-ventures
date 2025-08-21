@@ -88,28 +88,32 @@ export async function createSale(
     await db.beginTransaction();
     // Add sale record (without payment fields)
     await db.executeQuery(
-      `INSERT INTO sales (id, customer_id, employee_id, total_amount, discount) 
-             VALUES ($1, $2, $3, $4, $5)`,
+      `INSERT INTO sales (id, customer_id, employee_id, total_amount, discount, total_cost, gross_profit) 
+             VALUES ($1, $2, $3, $4, $5, $6, $7)`,
       [
         saleId,
         sale.customer_id,
         sale.employee_id,
         sale.total_amount,
         sale.discount,
+        sale.total_cost,
+        sale.gross_profit,
       ]
     );
 
     // Add sale items and update stock
     for (const item of items) {
       await db.executeQuery(
-        `INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, total_price) 
-                 VALUES ($1, $2, $3, $4, $5)`,
+        `INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, total_price, profit, cost_price_at_sale) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
         [
           saleId,
           item.product_id,
           item.quantity,
           item.unit_price,
           item.total_price,
+          item.profit,
+          item.cost_price_at_sale,
         ]
       );
 

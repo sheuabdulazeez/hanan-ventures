@@ -1,4 +1,4 @@
-import { TProduct, TProductPriceHistory, TInventoryAdjustment } from "@/types/database";
+import { TProduct, TProductPriceHistory, TInventoryAdjustment, InventoryAdjustmentType } from "@/types/database";
 import { initDatabase } from ".";
 
 export async function getProducts() {
@@ -46,8 +46,9 @@ export async function updateProduct(id: string, product: Partial<Omit<TProduct, 
     await db.execute(query, [id, ...params]);
 }
 
-export async function updateProductQuantity(id: string, quantity: number, reason: string) {
+export async function updateProductQuantity(id: string, quantity: number, adjustmentType: InventoryAdjustmentType, reason: string) {
     const db = await initDatabase();
+    console.log(quantity, adjustmentType, reason);
     try {
       await db.beginTransaction();
   
@@ -57,14 +58,14 @@ export async function updateProductQuantity(id: string, quantity: number, reason
          SET quantity_on_hand = quantity_on_hand + $1,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $2`,
-        [quantity, id]
+        [adjustmentType === InventoryAdjustmentType.INCREASE ? quantity : -quantity, id]
       );
   
       // Log the quantity adjustment
       await db.executeQuery(
-        `INSERT INTO inventory_adjustments (id, product_id, quantity_changed, reason)
-         VALUES (lower(hex(randomblob(16))), $1, $2, $3)`,
-        [id, quantity, reason]
+        `INSERT INTO inventory_adjustments (id, product_id, quantity, adjustment_type, reason)
+         VALUES (lower(hex(randomblob(16))), $1, $2, $3, $4)`,
+        [id, quantity, adjustmentType, reason]
       );
   
       await db.commit();

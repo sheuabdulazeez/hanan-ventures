@@ -823,7 +823,15 @@ export default function DebtorsPage() {
         </SheetContent>
       </Sheet>
 
-      <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
+      <Dialog open={showPaymentDialog} onOpenChange={(status) => {
+        setShowPaymentDialog(status);
+        if (!status) {
+          setPaymentAmount("");
+          setPaymentMethod("cash");
+          setBankName("");
+          setLastPayment(null)
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Record Debt Payment</DialogTitle>
@@ -898,6 +906,7 @@ export default function DebtorsPage() {
                   <PrintPaymentReceiptButton
                     debtor={lastPayment.debtor}
                     payment={lastPayment}
+
                   />
                 </div>
               </div>

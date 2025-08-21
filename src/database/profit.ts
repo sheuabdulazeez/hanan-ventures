@@ -27,34 +27,41 @@ export interface ProductProfitability {
   quantitySold: number;
 }
 
+function formatDateLocal(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // Get profit data for a specific date range
 export async function getProfitByDateRange(startDate: string, endDate: string): Promise<ProfitData> {
   const db = await initDatabase();
   
   try {
     // Get sales data with profit information
-    const salesResult = await db.select<{
+    const salesResult = await db.selectOne<{
       totalRevenue: number;
       totalCost: number;
       grossProfit: number;
-    }[]>(`
+    }>(`
       SELECT 
         COALESCE(SUM(total_amount), 0) as totalRevenue,
         COALESCE(SUM(total_cost), 0) as totalCost,
         COALESCE(SUM(gross_profit), 0) as grossProfit
       FROM sales 
-      WHERE DATE(created_at) BETWEEN $1 AND $2
+      WHERE DATE(sale_date) BETWEEN $1 AND $2
     `, [startDate, endDate]);
 
     // Get expenses for the same period
-    const expensesResult = await db.select<{ totalExpenses: number }[]>(`
+    const expensesResult = await db.selectOne<{ totalExpenses: number }>(`
       SELECT COALESCE(SUM(amount), 0) as totalExpenses
       FROM business_expenses 
       WHERE DATE(expense_date) BETWEEN $1 AND $2
     `, [startDate, endDate]);
 
-    const salesData = salesResult[0] || { totalRevenue: 0, totalCost: 0, grossProfit: 0 };
-    const expensesData = expensesResult[0] || { totalExpenses: 0 };
+    const salesData = salesResult || { totalRevenue: 0, totalCost: 0, grossProfit: 0 };
+    const expensesData = expensesResult || { totalExpenses: 0 };
 
     const netProfit = salesData.grossProfit - expensesData.totalExpenses;
     const profitMargin = salesData.totalRevenue > 0 ? (netProfit / salesData.totalRevenue) * 100 : 0;
@@ -83,7 +90,7 @@ export async function getTodayProfit(): Promise<ProfitData> {
 export async function getYesterdayProfit(): Promise<ProfitData> {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
+  const yesterdayStr = formatDateLocal(yesterday);
   return getProfitByDateRange(yesterdayStr, yesterdayStr);
 }
 
@@ -93,8 +100,8 @@ export async function getWeekProfit(): Promise<ProfitData> {
   const startOfWeek = new Date(today);
   startOfWeek.setDate(today.getDate() - today.getDay());
   
-  const startDate = startOfWeek.toISOString().split('T')[0];
-  const endDate = today.toISOString().split('T')[0];
+  const startDate = formatDateLocal(startOfWeek);
+  const endDate = formatDateLocal(today);
   
   return getProfitByDateRange(startDate, endDate);
 }
@@ -104,8 +111,9 @@ export async function getMonthProfit(): Promise<ProfitData> {
   const today = new Date();
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
   
-  const startDate = startOfMonth.toISOString().split('T')[0];
-  const endDate = today.toISOString().split('T')[0];
+  
+  const startDate = formatDateLocal(startOfMonth);
+  const endDate = formatDateLocal(today);
   
   return getProfitByDateRange(startDate, endDate);
 }
@@ -122,18 +130,35 @@ export async function getDailyProfitBreakdown(startDate: string, endDate: string
         SELECT DATE(date, '+1 day')
         FROM date_range
         WHERE date < DATE($2)
+      ),
+      daily_sales AS (
+        SELECT 
+          DATE(created_at) as date,
+          SUM(total_amount) as revenue,
+          SUM(total_cost) as cost,
+          SUM(gross_profit) as grossProfit
+        FROM sales
+        WHERE DATE(created_at) BETWEEN $1 AND $2
+        GROUP BY DATE(created_at)
+      ),
+      daily_expenses AS (
+        SELECT 
+          DATE(expense_date) as date,
+          SUM(amount) as expenses
+        FROM business_expenses
+        WHERE DATE(expense_date) BETWEEN $1 AND $2
+        GROUP BY DATE(expense_date)
       )
       SELECT 
         dr.date,
-        COALESCE(SUM(s.total_amount), 0) as revenue,
-        COALESCE(SUM(s.total_cost), 0) as cost,
-        COALESCE(SUM(s.gross_profit), 0) as grossProfit,
-        COALESCE(SUM(be.amount), 0) as expenses,
-        COALESCE(SUM(s.gross_profit), 0) - COALESCE(SUM(be.amount), 0) as netProfit
+        COALESCE(ds.revenue, 0) as revenue,
+        COALESCE(ds.cost, 0) as cost,
+        COALESCE(ds.grossProfit, 0) as grossProfit,
+        COALESCE(de.expenses, 0) as expenses,
+        COALESCE(ds.grossProfit, 0) - COALESCE(de.expenses, 0) as netProfit
       FROM date_range dr
-      LEFT JOIN sales s ON DATE(s.created_at) = dr.date
-      LEFT JOIN business_expenses be ON DATE(be.expense_date) = dr.date
-      GROUP BY dr.date
+      LEFT JOIN daily_sales ds ON ds.date = dr.date
+      LEFT JOIN daily_expenses de ON de.date = dr.date
       ORDER BY dr.date
     `, [startDate, endDate]);
   } catch (error) {
