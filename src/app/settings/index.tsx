@@ -206,7 +206,7 @@ export default function SettingsPage() {
 
 
   return (
-    <div className="max-w-7xl mx-auto p-6">
+    <div className="container mx-auto py-4 px-2 sm:px-4 sm:py-10">
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-2xl font-bold">Admin Settings</h1>

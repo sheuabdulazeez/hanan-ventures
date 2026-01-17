@@ -155,7 +155,7 @@ export default function Stocks() {
   const lowStockItems = products.filter(product => product.quantity_on_hand <= product.reorder_level).length;
 
   return (
-    <div className="space-y-6">
+    <div className="container mx-auto py-4 px-2 sm:px-4 sm:py-10">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold text-gray-800">Stocks / Inventory</h1>
         <div className="space-x-2 flex">

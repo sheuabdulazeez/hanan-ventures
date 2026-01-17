@@ -1,89 +1,143 @@
-import { useState } from 'react'
-import { motion } from 'framer-motion'
-import { toast } from '../hooks/use-toast'
-import { login } from '@/database/user'
-import { useAppStore } from '@/lib/store'
+import { useState } from "react";
+import { motion } from "framer-motion";
+import { toast } from "../hooks/use-toast";
+import { login } from "@/database/user";
+import { useAppStore } from "@/lib/store";
+import { Button } from "./ui/button";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Eye, EyeOff, ShoppingCart } from "lucide-react";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
 
 export default function AuthForm() {
-  const { setUser } = useAppStore();
+  const { setUser, businessInfo } = useAppStore();
 
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
-  const [isVerifying, setIsVerifying] = useState(false)
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+  const [isVerifying, setIsVerifying] = useState(false);
+
+  const [formData, setFormData] = useState({
+    username: "",
+    password: "",
+  });
+  const [showPassword, setShowPassword] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState("");
 
   // TODO: Implement check for authentication token and redirect to dashboard
 
-
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
-    e.preventDefault()
-    setIsVerifying(true)
-    await login(username, password).then(res => {
-      if (!res || 'error' in res) {
-        toast({ title: 'Invalid username or password', variant: "destructive" })
-        setIsVerifying(false)
-        return
-      }
-      setUser(res);
-      toast({ title: 'Login successful', variant: "default" })
-    }).catch(err => {
-      toast({ variant: "destructive", title: 'Error', description: err.message })
-      setIsVerifying(false)
-    })
-  }
+    e.preventDefault();
+    setIsVerifying(true);
+    await login(username, password)
+      .then((res) => {
+        if (!res || "error" in res) {
+          toast({
+            title: "Invalid username or password",
+            variant: "destructive",
+          });
+          setIsVerifying(false);
+          return;
+        }
+        setUser(res);
+        toast({ title: "Login successful", variant: "default" });
+      })
+      .catch((err) => {
+        toast({
+          variant: "destructive",
+          title: "Error",
+          description: err.message,
+        });
+        setIsVerifying(false);
+      });
+  };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="bg-white bg-opacity-10 backdrop-filter backdrop-blur-lg rounded-xl p-8 shadow-2xl w-full max-w-md"
-    >
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div>
-          <label htmlFor="username" className="block text-sm font-medium text-white mb-2">
-            Username
-          </label>
-          <input
-            type="text"
-            id="username"
-            autoCapitalize='off'
-            autoComplete='off'
-            autoCorrect='off'
-            autoFocus={true}
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            className="w-full px-4 py-2 rounded-md bg-white bg-opacity-20 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 transition duration-200"
-            placeholder="Enter your username"
-            required
-          />
-        </div>
-        <div>
-          <label htmlFor="password" className="block text-sm font-medium text-white mb-2">
-            Password
-          </label>
-          <input
-            type="password"
-            id="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="w-full px-4 py-2 rounded-md bg-white bg-opacity-20 text-white placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-purple-500 transition duration-200"
-            placeholder="Enter your password"
-            required
-          />
-        </div>
-        <button
-          type="submit"
-          disabled={isVerifying}
-          className={`w-full py-2 px-4 rounded-md text-white font-semibold transition duration-200 ${
-            isVerifying
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-purple-600 hover:bg-purple-700 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-opacity-50'
-          }`}
-        >
-          {isVerifying ? 'Verifying...' : 'Login'}
-        </button>
-      </form>
-    </motion.div>
-  )
-}
+    <Card className="w-full max-w-md">
+      <CardHeader className="text-center">
+        <div className="flex items-center justify-center space-x-2 mb-4">
+          {!businessInfo.logo ? (
+            <div className="h-10 w-10 rounded-lg bg-accent flex items-center justify-center">
+              <ShoppingCart className="h-6 w-6 text-accent-foreground" />
+            </div>
+          ) : null}
 
+          <h1 className="text-2xl font-bold text-foreground">
+            {businessInfo.name || "Retail POS"}
+          </h1>
+        </div>
+        <CardTitle className="text-xl">Welcome Back</CardTitle>
+        <CardDescription>Sign in to your account to continue</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="username">Username</Label>
+            <Input
+              id="username"
+              type="text"
+              placeholder="Enter your username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="password">Password</Label>
+            <div className="relative">
+              <Input
+                id="password"
+                type={showPassword ? "text" : "password"}
+                placeholder="Enter your password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+              />
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
+                onClick={() => setShowPassword(!showPassword)}
+              >
+                {showPassword ? (
+                  <EyeOff className="h-4 w-4 text-muted-foreground" />
+                ) : (
+                  <Eye className="h-4 w-4 text-muted-foreground" />
+                )}
+              </Button>
+            </div>
+          </div>
+
+          {error && (
+            <div className="text-sm text-destructive bg-destructive/10 p-3 rounded-md">
+              {error}
+            </div>
+          )}
+
+          <Button
+            type="submit"
+            className="w-full bg-accent hover:bg-accent/90"
+            disabled={isLoading}
+          >
+            {isLoading ? "Signing in..." : "Sign In"}
+          </Button>
+        </form>
+
+        <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+          <p className="text-sm text-muted-foreground mb-2">Info:</p>
+          <div className="space-y-1 text-xs">
+            Contact admin if you don't know your login details.
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}

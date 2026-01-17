@@ -4,20 +4,25 @@ import { AppSidebar } from "./app-sidebar";
 
 const Layout = () => {
   return (
-    <div className="flex h-screen bg-gray-100">
-      <SidebarProvider>
-        
-        <AppSidebar />
-        <SidebarInset>
-          <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-100">
-            <SidebarTrigger className="items-center" />
-            <div className="container mx-auto px-6 pb-8">
-              <Outlet />
-            </div>
-          </main>
-        </SidebarInset>
-      </SidebarProvider>
-    </div>
+    <SidebarProvider
+      style={
+        {
+          "--sidebar-width": "17.5rem", // 280px
+          "--header-height": "4rem", // 64px
+        } as React.CSSProperties
+      }
+    >
+      <AppSidebar variant="sidebar" />
+      <SidebarInset className="flex-1 min-w-0">
+        <header className="flex h-16 shrink-0 items-center gap-2 px-4 md:px-6 border-b border-border bg-background">
+          <SidebarTrigger className="-ml-1" />
+        </header>
+        <div className="flex-1 p-4 md:p-6 overflow-auto">
+          <Outlet />
+        </div>
+      </SidebarInset>
+
+    </SidebarProvider>
   );
 };
 

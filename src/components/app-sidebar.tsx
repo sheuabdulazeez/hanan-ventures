@@ -1,12 +1,22 @@
 import * as React from "react";
 import {
   AudioWaveform,
-  Bot,
-  Frame,
-  Map,
+  Boxes,
+  ChevronDown,
+  FileText,
+  LayoutDashboard,
   PieChart,
   Plus,
-  SquareTerminal,
+  Receipt,
+  Scale,
+  Settings,
+  ShieldCheck,
+  ShoppingCart,
+  TrendingUp,
+  Truck,
+  Users,
+  UsersRound,
+  Wallet,
 } from "lucide-react";
 
 import { NavMain } from "./nav-main";
@@ -20,7 +30,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
-  SidebarTrigger,
 } from "./ui/sidebar";
 import {
   DropdownMenu,
@@ -28,78 +37,86 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
-import { Button } from "./ui/button";
 import { Link } from "react-router";
 import { useAppStore } from "@/lib/store";
 
 // This is sample data.
 const data = {
-  user: {
-    name: "shadcn",
-    email: "m@example.com",
-    avatar: "/avatars/shadcn.jpg",
-  },
   navMain: [
     {
-      title: "Dashboard",
-      url: "/dashboard",
-      icon: SquareTerminal,
+      title: "General",
+      items: [
+        {
+          title: "Dashboard",
+          url: "/dashboard",
+          icon: LayoutDashboard,
+        },
+        {
+          title: "Sales",
+          url: "/dashboard/sales",
+          icon: ShoppingCart,
+        },
+      ],
     },
     {
-      title: "Sales",
-      url: "/dashboard/sales",
-      icon: SquareTerminal,
+      title: "Inventory & CRM",
+      items: [
+        {
+          title: "Stocks",
+          url: "/dashboard/stocks",
+          icon: Boxes,
+        },
+        {
+          title: "Customers",
+          url: "/dashboard/customers",
+          icon: Users,
+        },
+        {
+          title: "Debtors",
+          url: "/dashboard/debtors",
+          icon: Wallet,
+        },
+      ],
     },
     {
-      title: "Customers",
-      url: "/dashboard/customers",
-      icon: SquareTerminal,
-    },
-    {
-      title: "Stocks",
-      url: "/dashboard/stocks",
-      icon: SquareTerminal,
-    },
-    {
-      title: "Debtors",
-      url: "/dashboard/debtors",
-      icon: SquareTerminal,
-    },
-    {
-      title: "Admin",
-      url: "#",
-      icon: Bot,
+      title: "Administration",
       role: ["admin", "manager"],
       items: [
         {
           title: "Suppliers",
           url: "/dashboard/suppliers",
+          icon: Truck,
         },
         {
           title: "Purchase Orders",
           url: "/dashboard/orders",
+          icon: FileText,
         },
         {
           title: "Expenses",
           url: "/dashboard/expenses",
+          icon: Receipt,
         },
         {
           title: "Profit",
           url: "/dashboard/profit",
-          icon: PieChart,
+          icon: TrendingUp,
         },
         {
           title: "Settings",
           url: "/dashboard/settings",
+          icon: Settings,
         },
         {
           title: "Teams",
           url: "/dashboard/teams",
+          icon: UsersRound,
         },
-        // {
-        //   title: "Unit Price Demo",
-        //   url: "/dashboard/unit-price-demo",
-        // },
+        {
+          title: "Unit Price Demo",
+          url: "/dashboard/unit-price-demo",
+          icon: Scale,
+        },
       ],
     },
   ],
@@ -108,67 +125,88 @@ const data = {
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const {
     auth: { user },
-    businessInfo
+    businessInfo,
   } = useAppStore();
   const isAdmin = user?.role === "admin" || user?.role === "manager";
-  return (
-    <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader>
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton size="lg" asChild>
-              <div className="cursor-pointer">
-                {
-                  businessInfo.logo ? (
-                    <div className="flex h-10 w-10 items-center justify-center rounded">
-                      <img src={businessInfo.logo} alt={businessInfo.name} className="h-10 w-10 rounded-full" />
-                    </div>
-                  ) : (
-                    <div className="flex h-10 w-10 items-center justify-center rounded bg-gradient-to-br from-purple-700 to-indigo-800">
-                      <AudioWaveform className="h-5 w-5 text-white" />
-                    </div>
-                  )
-                }
 
-                <div className="flex flex-col gap-0.5 leading-none">
-                  <span className="font-bold text-md">{businessInfo.name}</span>
-                  <span className="">Enterprise</span>
-                </div>
+  return (
+    <Sidebar collapsible="icon" {...props} className="border-r border-sidebar-border bg-sidebar/50 backdrop-blur-xl">
+      <SidebarHeader className="p-4">
+        <div className="flex flex-col gap-4">
+          {/* Business Info Section */}
+          <div className="flex items-center gap-3 px-1 transition-all group-data-[collapsible=icon]:opacity-0">
+            {businessInfo.logo ? (
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-sidebar-border bg-white shadow-sm overflow-hidden">
+                <img
+                  src={businessInfo.logo}
+                  alt={businessInfo.name}
+                  className="h-full w-full object-cover"
+                />
               </div>
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="w-full rounded bg-gradient-to-t from-purple-700 to-indigo-800">
-                <Plus className="mr-2 h-4 w-4" /> Add New
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent className="w-56">
-              <DropdownMenuItem>
-                <Link to="/dashboard/sales/create" className="flex w-full">
-                  Sale
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Link to="/dashboard/customers/create" className="flex w-full">
-                  Customer
-                </Link>
-              </DropdownMenuItem>
-              {isAdmin && (
-                <DropdownMenuItem>
-                  <Link to="/dashboard/stocks/create" className="flex w-full">
-                    Stock
+            ) : (
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-600 text-white shadow-lg shadow-emerald-600/20">
+                <AudioWaveform className="h-6 w-6" />
+              </div>
+            )}
+            <div className="flex flex-col gap-0.5 overflow-hidden">
+              <span className="truncate text-sm font-bold leading-tight text-sidebar-foreground">
+                {businessInfo.name}
+              </span>
+              <span className="truncate text-[11px] font-medium text-sidebar-foreground/60 uppercase tracking-wider">
+                {user?.role || "User"}
+              </span>
+            </div>
+          </div>
+
+          {/* Quick Actions Dropdown */}
+          <div className="px-1 group-data-[collapsible=icon]:px-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <SidebarMenuButton
+                  size="lg"
+                  className="bg-emerald-600 text-white hover:bg-emerald-700 hover:text-white shadow-md shadow-emerald-900/10 transition-all active:scale-95 flex items-center justify-between px-3 h-10 rounded-lg group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
+                >
+                  <div className="flex items-center gap-2">
+                    <Plus className="h-4 w-4 shrink-0 transition-transform group-hover:rotate-90" />
+                    <span className="font-semibold group-data-[collapsible=icon]:hidden">Add New</span>
+                  </div>
+                  <ChevronDown className="h-3.5 w-3.5 opacity-50 group-data-[collapsible=icon]:hidden" />
+                </SidebarMenuButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-56" align="start" side="right" sideOffset={8}>
+                <DropdownMenuItem className="cursor-pointer">
+                  <Link to="/dashboard/sales/create" className="flex items-center gap-2 w-full py-1">
+                    <ShoppingCart className="h-4 w-4 text-emerald-600" />
+                    <span>New Sale</span>
                   </Link>
                 </DropdownMenuItem>
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </SidebarMenu>
+                <DropdownMenuItem className="cursor-pointer">
+                  <Link to="/dashboard/customers/create" className="flex items-center gap-2 w-full py-1">
+                    <Users className="h-4 w-4 text-blue-600" />
+                    <span>New Customer</span>
+                  </Link>
+                </DropdownMenuItem>
+                {isAdmin && (
+                  <DropdownMenuItem className="cursor-pointer">
+                    <Link to="/dashboard/stocks/create" className="flex items-center gap-2 w-full py-1">
+                      <Boxes className="h-4 w-4 text-orange-600" />
+                      <span>New Stock Entry</span>
+                    </Link>
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
       </SidebarHeader>
-      <SidebarContent>
-        <NavMain items={data.navMain as any} />
+
+      <SidebarContent className="px-2 gap-0">
+        {data.navMain.map((group) => (
+          <NavMain key={group.title} title={group.title} items={group.items as any} />
+        ))}
       </SidebarContent>
-      <SidebarFooter>
+
+      <SidebarFooter className="p-4 border-t border-sidebar-border">
         <NavUser />
       </SidebarFooter>
       <SidebarRail />

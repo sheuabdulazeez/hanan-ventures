@@ -32,6 +32,12 @@ import {
   Play,
   X,
   Plus,
+  Search,
+  Minus,
+  DollarSign,
+  CreditCard,
+  Smartphone,
+  Package,
 } from "lucide-react";
 import { PaymentModal, PaymentDetails } from "@components/SalesPaymentModal";
 import { InvoiceModal } from "@components/InvoiceModal";
@@ -50,7 +56,45 @@ import { getProducts } from "@/database/products";
 import { createCustomer, ensureWalkInCustomer, getCustomers } from "@/database/customers";
 import { createSale } from "@/database/sales";
 import { useAppStore } from "@/lib/store";
-import { randomString } from "@/lib/utils";
+import { randomString, cn } from "@/lib/utils";
+
+// --- POS Integration Types ---
+type CommonUnit = {
+  id: string;
+  name: string;
+  abbrev: string;
+  related_units: string[];
+  created_at: string;
+  updated_at: string;
+};
+
+type ProductUnit = {
+  id: string;
+  product_id: string;
+  unit_id: string;
+  conversion_to_base: number;
+  selling_price: number;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+  unit?: CommonUnit;
+};
+
+// Extend TProduct for UI purposes if needed, 
+// though the database returns it with product_units joined usually
+type Product = TProduct & {
+  product_units: ProductUnit[];
+  base_unit_info?: CommonUnit;
+};
+
+const CATEGORIES = [
+  { id: "FLOUR", name: "Flour", icon: "🌾", color: "bg-green-200" },
+  { id: "DRINKS", name: "Drinks", icon: "🥤", color: "bg-purple-200" },
+  { id: "GRAINS", name: "Grains", icon: "🌾", color: "bg-blue-200" },
+  { id: "DAIRY", name: "Dairy", icon: "🥛", color: "bg-yellow-200" },
+  { id: "SNACKS", name: "Snacks", icon: "🍿", color: "bg-pink-200" },
+  { id: "SPICES", name: "Spices", icon: "🌶️", color: "bg-red-200" }
+];
 
 export default function CreateSales() {
   const { auth, activeSales, addActiveSale, updateActiveSale, removeActiveSale } = useAppStore();
@@ -60,9 +104,15 @@ export default function CreateSales() {
   const [isLoading, setIsLoading] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
-  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails & { sale: TSale&{items: SALE_SaleItem[]} } | null>(
+  const [paymentDetails, setPaymentDetails] = useState<PaymentDetails & { sale: TSale & { items: SALE_SaleItem[] } } | null>(
     null
   );
+
+  // POS specific UI state
+  const [isCheckout, setIsCheckout] = useState(false);
+  const [payments, setPayments] = useState<{ method: string; amount: number }[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string>("ALL");
 
   useEffect(() => {
     ensureWalkInCustomer().finally(() => {
@@ -71,11 +121,59 @@ export default function CreateSales() {
         getProducts()
       ]).then(([customersRes, productsRes]) => {
         setCustomers(customersRes);
-        setProducts(productsRes);
+        // Cast products to the extended Product type for UI use
+        setProducts(productsRes as unknown as Product[]);
       });
     })
-    
+
   }, []);
+
+  // --- POS Helpers ---
+  const formatCurrency = (amount: number) => {
+    return new Intl.NumberFormat('en-NG', {
+      style: 'currency',
+      currency: 'NGN',
+      minimumFractionDigits: 0
+    }).format(amount);
+  };
+
+  const getProductUnit = (product: Product, unitId: string): ProductUnit | undefined => {
+    return product.product_units?.find(pu => pu.unit_id === unitId);
+  };
+
+  const getAvailableStock = (product: Product, unitId: string): number => {
+    const productUnit = getProductUnit(product, unitId);
+    if (!productUnit) return product.quantity_on_hand; // Fallback to base
+    return Math.floor(product.quantity_on_hand / productUnit.conversion_to_base);
+  };
+
+  const getPrimaryUnit = (product: Product): ProductUnit | undefined => {
+    return product.product_units?.find(pu => pu.is_primary) || (product.product_units?.[0]);
+  };
+
+  const addPayment = (method: string) => {
+    if (payments.find(p => p.method === method)) return;
+
+    const currentSale = getCurrentSale();
+    if (!currentSale) return;
+
+    const total = currentSale.total;
+    const paid = payments.reduce((sum, p) => sum + p.amount, 0);
+    const remaining = total - paid;
+
+    if (remaining <= 0) return;
+    setPayments([...payments, { method, amount: remaining }]);
+  };
+
+  const removePayment = (index: number) => {
+    setPayments(payments.filter((_, i) => i !== index));
+  };
+
+  const updatePaymentAmount = (index: number, amount: number) => {
+    const newPayments = [...payments];
+    newPayments[index].amount = amount;
+    setPayments(newPayments);
+  };
 
 
 
@@ -115,67 +213,67 @@ export default function CreateSales() {
     });
   };
 
-  const handleAddProduct = (product: TProduct) => {
+  const handleAddProduct = (product: Product, unitId?: string) => {
     const currentSale = getCurrentSale();
-    if (!currentSale) return;
-
-    const existingItem = currentSale.items.find(
-      (item) => item.product.id === product.id
-    );
-
-    // Check if there's enough stock
-    const currentQuantity = existingItem ? existingItem.quantity : 0;
-    const requestedQuantity = currentQuantity + 0.25; // Increment by smallest unit (0.25)
-    if (requestedQuantity > product.quantity_on_hand) {
-      toast({
-        title: "Stock Warning!",
-        description: "Not enough stock available. Kindly restock the product.",
-        variant: "destructive",
-      });
+    if (!currentSale) {
+      createNewSale();
+      // We might need to wait for state update or just return and let user try again, 
+      // but usually getCurrentSale() will find the default active one.
+      return;
     }
 
+    const targetUnitId = unitId || getPrimaryUnit(product)?.unit_id || product.base_unit;
+    const productUnit = getProductUnit(product, targetUnitId);
+
+    if (!productUnit) {
+      toast({ title: "Error", description: "Selected unit not available", variant: "destructive" });
+      return;
+    }
+
+    const existingItem = currentSale.items.find(
+      (item) => item.product_id === product.id && (item as any).unit_used === targetUnitId
+    );
+
     if (existingItem) {
-      const newQuantity = existingItem.quantity + (product.quantity_on_hand >= 1 ? 1 : product.quantity_on_hand);
-      handleUpdateQuantity(
-        currentSale.items.indexOf(existingItem),
-        newQuantity
-      );
+      const newQuantity = existingItem.quantity + 1;
+      updateQuantity(currentSale.items.indexOf(existingItem), newQuantity);
     } else {
-      const initialQuantity = product.quantity_on_hand >= 1 ? 1 : product.quantity_on_hand;
-      const newSaleItem: SALE_SaleItem = {
+      const newSaleItem: SALE_SaleItem & { unit_used?: string; unit_info?: CommonUnit } = {
         id: `ITEM${currentSale.items.length + 1}`,
         sale_id: currentSale.id,
         product_id: product.id,
         product: product,
-        quantity: initialQuantity,
-        unit_price: product.selling_price,
-        total_price: product.selling_price,
-        cost_price_at_sale: product.cost_price,
+        quantity: 1,
+        unit_price: productUnit.selling_price,
+        total_price: productUnit.selling_price,
+        cost_price_at_sale: product.cost_price, // This should ideally be unit-aware too if stored per-base
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
+        unit_used: targetUnitId,
+        unit_info: productUnit.unit
       };
+
       updateCurrentSale({
         items: [...currentSale.items, newSaleItem],
       });
     }
+    toast({ title: "Added to order", description: `${product.name} added` });
   };
 
-  const handleUpdateQuantity = (index: number, quantity: number) => {
+  const updateQuantity = (index: number, quantity: number) => {
     const currentSale = getCurrentSale();
     if (!currentSale) return;
 
-    const item = currentSale.items[index];
-    // if (quantity > item.product.quantity_on_hand) {
-    //   toast({
-    //     title: "Stock Warning!",
-    //     description: "Not enough stock available. Kindly restock the product.",
-    //     variant: "destructive",
-    //   });
-    // }
-
     const updatedItems = [...currentSale.items];
+    const item = updatedItems[index];
+
     updatedItems[index].quantity = quantity;
+    updatedItems[index].total_price = quantity * item.unit_price;
     updateCurrentSale({ items: updatedItems });
+  };
+
+  const handleUpdateQuantity = (index: number, quantity: number) => {
+    updateQuantity(index, quantity);
   };
 
   const handleUpdatePrice = (index: number, price: number) => {
@@ -184,6 +282,7 @@ export default function CreateSales() {
 
     const updatedItems = [...currentSale.items];
     updatedItems[index].unit_price = price;
+    updatedItems[index].total_price = updatedItems[index].quantity * price;
     updateCurrentSale({ items: updatedItems });
   };
 
@@ -202,64 +301,86 @@ export default function CreateSales() {
     );
   };
 
-  const handlePaymentSubmit = async (details: PaymentDetails) => {
+  const handlePaymentSubmit = async (customPayments?: { method: PaymentMethod; amount: number; bank_name?: string; reference_number?: string }[]) => {
     setIsLoading(true);
 
     const currentSale = getCurrentSale();
     if (!currentSale || !currentSale.customer) return;
 
     try {
-      // Prepare sale items
-      const saleItems = currentSale.items.map((item) => ({
-        product_id: item.product.id,
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        total_price: item.quantity * item.unit_price,
-        cost_price_at_sale: item.cost_price_at_sale,
-        profit: item.quantity * (item.unit_price - item.cost_price_at_sale),
+      const finalPayments = customPayments || payments.map(p => ({
+        payment_method: (p.method === 'transfer' ? 'transfer' : p.method === 'card' ? 'pos' : 'cash') as PaymentMethod,
+        amount: p.amount,
+        bank_name: "",
+        reference_number: ""
       }));
+
+      // Prepare sale items - converting to base units for database stock management
+      const saleItems = currentSale.items.map((item: any) => {
+        const productUnit = getProductUnit(item.product, item.unit_used);
+        const conversion = productUnit?.conversion_to_base || 1;
+
+        // baseQuantity is what decrments from the product table
+        const baseQuantity = item.quantity * conversion;
+
+        return {
+          product_id: item.product.id,
+          quantity: baseQuantity,
+          unit_price: item.unit_price / conversion, // Effective price per base unit
+          total_price: item.total_price,
+          cost_price_at_sale: item.cost_price_at_sale / conversion,
+          profit: item.total_price - (baseQuantity * (item.cost_price_at_sale / conversion)),
+        };
+      });
 
       // Prepare sale data
       const saleData: Omit<TSale, "id" | "created_at" | "updated_at"> = {
         customer_id: currentSale.customer.id,
-        employee_id: auth.user.id, // TODO: Get from auth context
+        employee_id: auth.user.id,
         total_amount: currentSale.total,
-        discount: 0, // TODO: Add discount handling
-        total_cost: saleItems.reduce((total, item) => total + item.quantity * item.cost_price_at_sale, 0), // TODO: Add total cost handling
-        gross_profit: saleItems.reduce((total, item) => total + item.profit, 0), // TODO: Add gross profit handling
-        payments: details.payments,
+        discount: 0,
+        total_cost: saleItems.reduce((total, item) => total + item.quantity * (item.cost_price_at_sale || 0), 0),
+        gross_profit: saleItems.reduce((total, item) => total + (item.profit || 0), 0),
+        payments: finalPayments,
         sale_date: new Date().toISOString(),
       };
 
-
       // Create sale in database
-      const saleId = await createSale(saleData, saleItems);
+      const saleId = await createSale(saleData, saleItems as any);
 
-      setPaymentDetails({...details, saleId, sale: {
-        id: saleId,
-        total_amount: currentSale.total,
-        discount: 0,
-        employee_id: auth.user.id,
-        payments: details.payments,
-        sale_date: new Date().toISOString(),
-        customer_id: currentSale.customer.id,
-        customer_name: currentSale.customer.name,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        items: currentSale.items.map(item => ({
-          product: item.product,
-          quantity: item.quantity,
-          unit_price: item.unit_price,
-          total_price: item.quantity * item.unit_price,
-        }))
-      }});
+      setPaymentDetails({
+        payments: finalPayments,
+        saleId,
+        sale: {
+          id: saleId,
+          total_amount: currentSale.total,
+          discount: 0,
+          employee_id: auth.user.id,
+          payments: finalPayments,
+          sale_date: new Date().toISOString(),
+          customer_id: currentSale.customer.id,
+          customer_name: currentSale.customer.name,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+          items: currentSale.items.map(item => ({
+            product: item.product,
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            total_price: item.total_price,
+            unit_info: (item as any).unit_info
+          }))
+        }
+      });
+
+      setIsCheckout(false);
+      setPayments([]);
       setShowPaymentModal(false);
       setShowInvoiceModal(true);
 
       // Mark the current sale as completed
       await removeActiveSale(currentSale.id);
 
-      // Create a new active sale
+      // Create a new active sale if none left or just create a fresh one
       createNewSale();
 
       toast({
@@ -267,10 +388,10 @@ export default function CreateSales() {
         description: "Sale completed successfully!",
       });
     } catch (error) {
-      console.error("Failed to create sale:", error);
+      console.error("Failed to complete sale:", error);
       toast({
         title: "Error",
-        description: "Failed to complete sale. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to complete sale. Please try again.",
         variant: "destructive",
       });
     } finally {
@@ -306,9 +427,9 @@ export default function CreateSales() {
 
   const updateCurrentSale = async (updates: Partial<ActiveSale>) => {
     await updateActiveSale(currentSaleId, {
-        ...updates,
-        total: calculateTotal({ ...currentSale, ...updates }),
-      });
+      ...updates,
+      total: calculateTotal({ ...currentSale, ...updates }),
+    });
   };
 
   const pauseSale = async () => {
@@ -321,12 +442,12 @@ export default function CreateSales() {
       });
       return;
     }
-      await updateCurrentSale({ status: "paused" });
-      createNewSale();
-      toast({
-        title: "Success",
-        description: "Sale paused",
-      });
+    await updateCurrentSale({ status: "paused" });
+    createNewSale();
+    toast({
+      title: "Success",
+      description: "Sale paused",
+    });
   };
 
   const resumeSale = async (saleId: string) => {
@@ -530,7 +651,7 @@ export default function CreateSales() {
       {showPaymentModal && currentSale && (
         <PaymentModal
           isOpen={showPaymentModal}
-          onClose={() =>{  setShowPaymentModal(false); setIsLoading(false)}}
+          onClose={() => { setShowPaymentModal(false); setIsLoading(false) }}
           sale={{
             id: currentSale.id,
             customer: currentSale.customer!,
