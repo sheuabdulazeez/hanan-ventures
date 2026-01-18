@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
@@ -19,12 +19,21 @@ import {
   FileText,
   CreditCard,
   Palette,
+  Globe,
+  Mail,
+  Phone,
+  MapPin,
+  Clock,
+  Calendar,
+  DollarSign,
+  ChevronRight,
+  EyeOff
 } from "lucide-react"
-import { BaseDirectory, open, remove} from "@tauri-apps/plugin-fs"
-
+import { BaseDirectory, open, remove } from "@tauri-apps/plugin-fs"
 import { getAdminSettings, updateAdminSetting } from "@/database/settings";
 import { useAppStore } from "@/lib/store"
 import { toast } from "@/hooks/use-toast"
+import { motion, AnimatePresence } from "framer-motion"
 
 interface BusinessSettings {
   businessName: string
@@ -114,11 +123,8 @@ export default function SettingsPage() {
   // Load settings from localStorage on mount
   useEffect(() => {
     const loadSettings = async () => {
-     
-      
       try {
         const settings = await getAdminSettings();
-
         setBusinessSettings({
           businessName: settings.name,
           address: settings.address,
@@ -148,7 +154,6 @@ export default function SettingsPage() {
 
   const handleLogoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-
     if (file) {
       const logoFile = await open("logo.png", { baseDir: BaseDirectory.AppData, write: true, create: true, truncate: true });
       await logoFile.write(new Uint8Array(await file.arrayBuffer()));
@@ -156,14 +161,12 @@ export default function SettingsPage() {
 
       const reader = new FileReader()
       reader.onload = async (e) => {
-        
         setBusinessSettings((prev) => ({
           ...prev,
           logo: e.target?.result as string,
         }))
       }
       reader.readAsDataURL(file);
-      
     }
   }
 
@@ -171,11 +174,10 @@ export default function SettingsPage() {
     try {
       await remove("logo.png", { baseDir: BaseDirectory.AppData });
       setBusinessSettings((prev) => ({
-      ...prev,
-      logo: null,
-    }))
-    } catch (error) {}
-    
+        ...prev,
+        logo: null,
+      }))
+    } catch (error) { }
   }
 
   const saveSettings = async () => {
@@ -197,491 +199,321 @@ export default function SettingsPage() {
         logo: businessSettings.logo,
       });
       reloadStore()
-      toast({title: "Success", description: "Settings saved successfully!"})
+      toast({ title: "Configuration Saved", description: "Operational parameters synchronized." })
     } catch (error) {
       console.error("Error saving settings:", error)
-      toast({title: "Error", description: "Error saving settings. Please try again."})
+      toast({ title: "Sync Fault", description: "Failed to persist configuration changes.", variant: "destructive" })
     }
   }
 
-
   return (
-    <div className="container mx-auto py-4 px-2 sm:px-4 sm:py-10">
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold">Admin Settings</h1>
-          <p className="text-gray-600">Configure your point of sale system</p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setShowPreview(!showPreview)}>
-            <Eye className="w-4 h-4 mr-2" />
-            {showPreview ? "Hide" : "Show"} Preview
-          </Button>
-          <Button onClick={saveSettings}>
-            <Save className="w-4 h-4 mr-2" />
-            Save All Settings
-          </Button>
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="min-h-screen bg-slate-50/50 pb-12"
+    >
+      {/* Header Section */}
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-10">
+        <div className="container mx-auto px-6 py-8">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <div>
+              <h1 className="text-4xl font-black text-slate-900 mb-2">System Configuration</h1>
+              <p className="text-slate-500 font-medium tracking-tight">Fine-tune your point of sale environment</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowPreview(!showPreview)}
+                className="h-12 px-6 rounded-2xl border-slate-200 bg-white font-black uppercase tracking-widest text-[10px] hover:bg-slate-50"
+              >
+                {showPreview ? <EyeOff className="w-4 h-4 mr-2" /> : <Eye className="w-4 h-4 mr-2" />}
+                {showPreview ? "Hide" : "Show"} Preview
+              </Button>
+              <Button
+                onClick={saveSettings}
+                className="h-12 px-8 rounded-2xl bg-slate-900 text-white font-black uppercase tracking-widest text-[10px] hover:bg-slate-800 shadow-lg shadow-slate-200"
+              >
+                <Save className="w-4 h-4 mr-2" />
+                Persist Changes
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-6">
-              <TabsTrigger value="business">
-                <Building2 className="w-4 h-4 mr-1" />
-                Business
-              </TabsTrigger>
-              <TabsTrigger value="receipt">
-                <Receipt className="w-4 h-4 mr-1" />
-                Receipt
-              </TabsTrigger>
-              <TabsTrigger value="system" disabled>
-                <Settings className="w-4 h-4 mr-1" />
-                System
-              </TabsTrigger>
-              <TabsTrigger value="payment" disabled>
-                <CreditCard className="w-4 h-4 mr-1" />
-                Payment
-              </TabsTrigger>
-              <TabsTrigger value="interface" disabled>
-                <Palette className="w-4 h-4 mr-1" />
-                Interface
-              </TabsTrigger>
-            </TabsList>
+      <div className="container mx-auto px-6 mt-8">
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <div className={`${showPreview ? 'lg:col-span-8' : 'lg:col-span-12'} transition-all duration-300`}>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+              <TabsList className="bg-white border border-slate-200 p-1.5 rounded-2xl h-14 w-full flex items-center justify-start overflow-x-auto gap-2 no-scrollbar">
+                {[
+                  { id: 'business', label: 'Business', icon: Building2 },
+                  { id: 'receipt', label: 'Receipt', icon: Receipt },
+                  { id: 'system', label: 'System', icon: Settings, disabled: true },
+                  { id: 'payment', label: 'Payment', icon: CreditCard, disabled: true },
+                  { id: 'interface', label: 'Interface', icon: Palette, disabled: true },
+                ].map((tab) => (
+                  <TabsTrigger
+                    key={tab.id}
+                    value={tab.id}
+                    disabled={tab.disabled}
+                    className="flex-1 min-w-[120px] rounded-xl font-black uppercase tracking-widest text-[10px] data-[state=active]:bg-slate-900 data-[state=active]:text-white h-11"
+                  >
+                    <tab.icon className="w-3.5 h-3.5 mr-2" />
+                    {tab.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
 
-            {/* Business Information Tab */}
-            <TabsContent value="business" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Business Information</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 gap-4">
-                    <div>
-                      <Label htmlFor="businessName">Business Name *</Label>
-                      <Input
-                        id="businessName"
-                        value={businessSettings.businessName}
-                        onChange={(e) => setBusinessSettings((prev) => ({ ...prev, businessName: e.target.value }))}
-                        placeholder="Enter business name"
-                      />
-                    </div>
-                  </div>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={activeTab}
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  transition={{ duration: 0.2 }}
+                >
+                  {activeTab === 'business' && (
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Card className="bg-white border-slate-200 shadow-sm">
+                          <CardHeader className="p-6 border-b border-slate-50">
+                            <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-900">Primary Identity</CardTitle>
+                            <CardDescription className="text-[10px] uppercase font-bold text-slate-400">Main business details</CardDescription>
+                          </CardHeader>
+                          <CardContent className="p-6 space-y-5">
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Business Name</Label>
+                              <Input
+                                value={businessSettings.businessName}
+                                onChange={(e) => setBusinessSettings((prev) => ({ ...prev, businessName: e.target.value }))}
+                                className="h-11 bg-slate-50 border-slate-200 font-bold focus:bg-white transition-colors"
+                              />
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Street Address</Label>
+                              <Input
+                                value={businessSettings.address}
+                                onChange={(e) => setBusinessSettings((prev) => ({ ...prev, address: e.target.value }))}
+                                className="h-11 bg-slate-50 border-slate-200 font-medium focus:bg-white"
+                              />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">City</Label>
+                                <Input
+                                  value={businessSettings.city}
+                                  onChange={(e) => setBusinessSettings((prev) => ({ ...prev, city: e.target.value }))}
+                                  className="h-11 bg-slate-50 border-slate-200 font-medium"
+                                />
+                              </div>
+                              <div className="space-y-1.5">
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">State / Province</Label>
+                                <Input
+                                  value={businessSettings.state}
+                                  onChange={(e) => setBusinessSettings((prev) => ({ ...prev, state: e.target.value }))}
+                                  className="h-11 bg-slate-50 border-slate-200 font-medium"
+                                />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
 
-                  <div>
-                    <Label htmlFor="address">Address</Label>
-                    <Input
-                      id="address"
-                      value={businessSettings.address}
-                      onChange={(e) => setBusinessSettings((prev) => ({ ...prev, address: e.target.value }))}
-                      placeholder="Enter business address"
-                    />
-                  </div>
+                        <Card className="bg-white border-slate-200 shadow-sm">
+                          <CardHeader className="p-6 border-b border-slate-50">
+                            <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-900">Communications</CardTitle>
+                            <CardDescription className="text-[10px] uppercase font-bold text-slate-400">Contact and web presence</CardDescription>
+                          </CardHeader>
+                          <CardContent className="p-6 space-y-5">
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Support Email</Label>
+                              <div className="relative">
+                                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <Input
+                                  type="email"
+                                  value={businessSettings.email}
+                                  onChange={(e) => setBusinessSettings((prev) => ({ ...prev, email: e.target.value }))}
+                                  className="h-11 pl-10 bg-slate-50 border-slate-200 font-medium"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Business Phone</Label>
+                              <div className="relative">
+                                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <Input
+                                  value={businessSettings.phone}
+                                  onChange={(e) => setBusinessSettings((prev) => ({ ...prev, phone: e.target.value }))}
+                                  className="h-11 pl-10 bg-slate-50 border-slate-200 font-medium"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Web URL</Label>
+                              <div className="relative">
+                                <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <Input
+                                  value={businessSettings.website}
+                                  onChange={(e) => setBusinessSettings((prev) => ({ ...prev, website: e.target.value }))}
+                                  className="h-11 pl-10 bg-slate-50 border-slate-200 font-medium"
+                                />
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor="city">City</Label>
-                      <Input
-                        id="city"
-                        value={businessSettings.city}
-                        onChange={(e) => setBusinessSettings((prev) => ({ ...prev, city: e.target.value }))}
-                        placeholder="City"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="state">State</Label>
-                      <Input
-                        id="state"
-                        value={businessSettings.state}
-                        onChange={(e) => setBusinessSettings((prev) => ({ ...prev, state: e.target.value }))}
-                        placeholder="State"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="zipCode">ZIP Code</Label>
-                      <Input
-                        id="zipCode"
-                        value={businessSettings.zipCode}
-                        onChange={(e) => setBusinessSettings((prev) => ({ ...prev, zipCode: e.target.value }))}
-                        placeholder="ZIP"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor="phone">Phone Number</Label>
-                      <Input
-                        id="phone"
-                        value={businessSettings.phone}
-                        onChange={(e) => setBusinessSettings((prev) => ({ ...prev, phone: e.target.value }))}
-                        placeholder="+234 123 456 7890"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="email">Email Address</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={businessSettings.email}
-                        onChange={(e) => setBusinessSettings((prev) => ({ ...prev, email: e.target.value }))}
-                        placeholder="info@business.com"
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor="website">Website</Label>
-                      <Input
-                        id="website"
-                        value={businessSettings.website}
-                        onChange={(e) => setBusinessSettings((prev) => ({ ...prev, website: e.target.value }))}
-                        placeholder="www.business.com"
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Business Logo</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    {businessSettings.logo ? (
-                      <div className="flex items-center gap-4">
-                        <div className="w-20 h-20 border rounded-lg overflow-hidden bg-gray-50">
-                          <img
-                            src={businessSettings.logo || "/placeholder.svg"}
-                            alt="Business Logo"
-                            className="w-full h-full object-contain"
-                          />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-sm text-gray-600">Current logo</p>
-                          <Button variant="outline" size="sm" onClick={removeLogo} className="mt-2 bg-transparent">
-                            <X className="w-4 h-4 mr-2" />
-                            Remove Logo
-                          </Button>
-                        </div>
+                        <Card className="bg-white border-slate-200 shadow-sm md:col-span-2 overflow-hidden">
+                          <CardHeader className="p-6 border-b border-slate-50">
+                            <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-900">Brand Assets</CardTitle>
+                            <CardDescription className="text-[10px] uppercase font-bold text-slate-400">Business logo and iconography</CardDescription>
+                          </CardHeader>
+                          <CardContent className="p-8">
+                            <div className="flex flex-col md:flex-row items-center gap-10">
+                              <div className="relative group">
+                                <div className="w-32 h-32 rounded-3xl bg-slate-100 border-2 border-dashed border-slate-200 flex items-center justify-center overflow-hidden transition-all group-hover:border-slate-900">
+                                  {businessSettings.logo ? (
+                                    <img src={businessSettings.logo} alt="Logo" className="w-full h-full object-contain p-4" />
+                                  ) : (
+                                    <Upload className="w-8 h-8 text-slate-300" />
+                                  )}
+                                </div>
+                                {businessSettings.logo && (
+                                  <button
+                                    onClick={removeLogo}
+                                    className="absolute -top-2 -right-2 w-7 h-7 bg-white border border-slate-200 rounded-full flex items-center justify-center text-slate-400 hover:text-red-500 shadow-sm"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                              <div className="flex-1 space-y-4 text-center md:text-left">
+                                <div>
+                                  <h4 className="text-sm font-black text-slate-900">Official Identity Mark</h4>
+                                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">PNG or JPG • Transparent background recommended</p>
+                                </div>
+                                <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
+                                  <input
+                                    ref={fileInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={handleLogoUpload}
+                                    className="hidden"
+                                  />
+                                  <Button
+                                    variant="outline"
+                                    onClick={() => fileInputRef.current?.click()}
+                                    className="h-10 px-6 rounded-xl border-slate-200 font-black uppercase tracking-widest text-[9px]"
+                                  >
+                                    Upload New Asset
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </CardContent>
+                        </Card>
                       </div>
-                    ) : (
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-                        <Upload className="w-8 h-8 mx-auto text-gray-400 mb-2" />
-                        <p className="text-gray-600 mb-2">No logo uploaded</p>
-                        <p className="text-sm text-gray-500 mb-4">Upload a logo to display on receipts</p>
-                      </div>
-                    )}
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept="image/*"
-                      onChange={handleLogoUpload}
-                      className="hidden"
-                    />
-                    <Button variant="outline" onClick={() => fileInputRef.current?.click()}>
-                      <Upload className="w-4 h-4 mr-2" />
-                      {businessSettings.logo ? "Change Logo" : "Upload Logo"}
-                    </Button>
-                    <p className="text-xs text-gray-500">Recommended: PNG or JPG, max 1MB, square format</p>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Receipt Settings Tab */}
-            <TabsContent value="receipt" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Receipt Content</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div>
-                    <Label htmlFor="footerText">Footer Text</Label>
-                    <Textarea
-                      id="footerText"
-                      value={receiptSettings.footerText}
-                      onChange={(e) => setReceiptSettings((prev) => ({ ...prev, footerText: e.target.value }))}
-                      placeholder="Visit us again soon!"
-                      rows={2}
-                    />
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* System Settings Tab */}
-            <TabsContent value="system" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Currency</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor="currency">Currency</Label>
-                      <Select
-                        value={systemSettings.currency}
-                        onValueChange={(value) => setSystemSettings((prev) => ({ ...prev, currency: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="NGN">Nigerian Naira (NGN)</SelectItem>
-                          <SelectItem value="USD">US Dollar (USD)</SelectItem>
-                          <SelectItem value="EUR">Euro (EUR)</SelectItem>
-                          <SelectItem value="GBP">British Pound (GBP)</SelectItem>
-                          <SelectItem value="GHS">Ghanaian Cedi (GHS)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="currencySymbol">Currency Symbol</Label>
-                      <Input
-                        id="currencySymbol"
-                        value={systemSettings.currencySymbol}
-                        onChange={(e) => setSystemSettings((prev) => ({ ...prev, currencySymbol: e.target.value }))}
-                        placeholder="₦"
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Date & Time Format</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="dateFormat">Date Format</Label>
-                      <Select
-                        value={systemSettings.dateFormat}
-                        onValueChange={(value) => setSystemSettings((prev) => ({ ...prev, dateFormat: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="DD/MM/YYYY">DD/MM/YYYY</SelectItem>
-                          <SelectItem value="MM/DD/YYYY">MM/DD/YYYY</SelectItem>
-                          <SelectItem value="YYYY-MM-DD">YYYY-MM-DD</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="timeFormat">Time Format</Label>
-                      <Select
-                        value={systemSettings.timeFormat}
-                        onValueChange={(value) => setSystemSettings((prev) => ({ ...prev, timeFormat: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="12h">12 Hour (AM/PM)</SelectItem>
-                          <SelectItem value="24h">24 Hour</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Payment Settings Tab */}
-            <TabsContent value="payment" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Accepted Payment Methods</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="flex items-center justify-between">
-                      <Label>Cash</Label>
-                      <Switch
-                        checked={paymentSettings.cashEnabled}
-                        onCheckedChange={(checked) => setPaymentSettings((prev) => ({ ...prev, cashEnabled: checked }))}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label>Credit/Debit Card</Label>
-                      <Switch
-                        checked={paymentSettings.cardEnabled}
-                        onCheckedChange={(checked) => setPaymentSettings((prev) => ({ ...prev, cardEnabled: checked }))}
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label>Transfer</Label>
-                      <Switch
-                        checked={paymentSettings.transferEnabled}
-                        onCheckedChange={(checked) =>
-                          setPaymentSettings((prev) => ({ ...prev, transferEnabled: checked }))
-                        }
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Interface Settings Tab */}
-            <TabsContent value="interface" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>Display Settings</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="theme">Theme</Label>
-                      <Select
-                        value={uiSettings.theme}
-                        onValueChange={(value) => setUISettings((prev) => ({ ...prev, theme: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="light">Light</SelectItem>
-                          <SelectItem value="dark">Dark</SelectItem>
-                          <SelectItem value="auto">Auto (System)</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div>
-                      <Label htmlFor="fontSize">Font Size</Label>
-                      <Select
-                        value={uiSettings.fontSize}
-                        onValueChange={(value) => setUISettings((prev) => ({ ...prev, fontSize: value }))}
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="small">Small</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="large">Large</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-
-                  <div>
-                    <Label htmlFor="gridColumns">Product Grid Columns</Label>
-                    <Input
-                      id="gridColumns"
-                      type="number"
-                      min="2"
-                      max="8"
-                      value={uiSettings.gridColumns}
-                      onChange={(e) =>
-                        setUISettings((prev) => ({ ...prev, gridColumns: Number.parseInt(e.target.value) || 4 }))
-                      }
-                    />
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <Label>Show Product Images</Label>
-                      <Switch
-                        checked={uiSettings.showProductImages}
-                        onCheckedChange={(checked) =>
-                          setUISettings((prev) => ({ ...prev, showProductImages: checked }))
-                        }
-                      />
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <Label>Compact Mode</Label>
-                      <Switch
-                        checked={uiSettings.compactMode}
-                        onCheckedChange={(checked) => setUISettings((prev) => ({ ...prev, compactMode: checked }))}
-                      />
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </TabsContent>
-          </Tabs>
-        </div>
-
-        {/* Preview Panel */}
-        {showPreview && (
-          <div className="lg:col-span-1">
-            <Card className="sticky top-6">
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <FileText className="w-4 h-4" />
-                  Receipt Preview
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="bg-white border-2 border-dashed border-gray-300 p-4 text-sm font-mono">
-                  {/* Logo */}
-                  {businessSettings.logo && (
-                    <div className="text-center mb-3">
-                      <img
-                        src={businessSettings.logo || "/placeholder.svg"}
-                        alt="Logo"
-                        className="w-16 h-16 mx-auto object-contain"
-                      />
                     </div>
                   )}
 
-                  {/* Business Info */}
-                  <div className="text-center mb-3">
-                    <div className="font-bold text-lg">{businessSettings.businessName}</div>
-                    <div>{businessSettings.address}</div>
-                    <div>
-                      {businessSettings.city}, {businessSettings.state} {businessSettings.zipCode}
+                  {activeTab === 'receipt' && (
+                    <Card className="bg-white border-slate-200 shadow-sm">
+                      <CardHeader className="p-6 border-b border-slate-50">
+                        <CardTitle className="text-xs font-black uppercase tracking-widest text-slate-900">Transaction Output</CardTitle>
+                        <CardDescription className="text-[10px] uppercase font-bold text-slate-400">Customize physical and digital receipts</CardDescription>
+                      </CardHeader>
+                      <CardContent className="p-6 space-y-6">
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Receipt Footer Message</Label>
+                          <Textarea
+                            value={receiptSettings.footerText}
+                            onChange={(e) => setReceiptSettings((prev) => ({ ...prev, footerText: e.target.value }))}
+                            placeholder="e.g. Thanks for your patronage! Visit again soon."
+                            className="min-h-[120px] bg-slate-50 border-slate-200 font-medium p-4 focus:bg-white transition-colors"
+                          />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                </motion.div>
+              </AnimatePresence>
+            </Tabs>
+          </div>
+
+          {/* Preview Panel (Receipt) */}
+          <AnimatePresence>
+            {showPreview && (
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 20 }}
+                className="lg:col-span-4"
+              >
+                <div className="bg-slate-900 rounded-[2.5rem] p-4 shadow-2xl border-4 border-slate-800 sticky top-[10rem]">
+                  <div className="bg-white rounded-[1.8rem] min-h-[500px] p-8 overflow-hidden relative">
+                    <div className="absolute top-0 left-0 w-full h-1 bg-slate-50" />
+
+                    {/* Simulated Receipt */}
+                    <div className="space-y-8 font-mono text-[11px] text-slate-600 uppercase tracking-tighter">
+                      <div className="text-center space-y-3 pt-4">
+                        {businessSettings.logo ? (
+                          <img src={businessSettings.logo} alt="Logo" className="w-16 h-16 mx-auto object-contain mb-4 grayscale" />
+                        ) : (
+                          <div className="w-12 h-12 bg-slate-50 rounded-full mx-auto flex items-center justify-center mb-2">
+                            <Receipt className="w-6 h-6 text-slate-200" />
+                          </div>
+                        )}
+                        <h2 className="text-sm font-black text-slate-900 leading-tight">{businessSettings.businessName || "Your Business"}</h2>
+                        <div className="flex flex-col gap-0.5 text-slate-400">
+                          <span className="flex items-center justify-center gap-1.5"><MapPin className="w-3 h-3" /> {businessSettings.address || "Address"}</span>
+                          <span className="flex items-center justify-center gap-1.5"><Phone className="w-3 h-3" /> {businessSettings.phone || "Phone"}</span>
+                        </div>
+                      </div>
+
+                      <div className="border-y border-dashed border-slate-200 py-3 flex justify-between px-2">
+                        <span>#INV-008241</span>
+                        <span>{new Date().toLocaleDateString()}</span>
+                      </div>
+
+                      <div className="space-y-4 px-2">
+                        <div className="flex justify-between font-bold">
+                          <span>Item Description</span>
+                          <span>Sum</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Sample Product x 2</span>
+                          <span>₦50,000</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span>Premium Add-on x 1</span>
+                          <span>₦15,500</span>
+                        </div>
+                      </div>
+
+                      <div className="pt-4 px-2 space-y-2">
+                        <div className="flex justify-between border-t border-dashed border-slate-200 pt-4">
+                          <span>Subtotal</span>
+                          <span>₦65,500</span>
+                        </div>
+                        <div className="flex justify-between font-black text-slate-900 text-sm">
+                          <span>Total Amount</span>
+                          <span>₦65,500</span>
+                        </div>
+                      </div>
+
+                      <div className="text-center pt-8 pb-4">
+                        <div className="border-t border-dashed border-slate-200 pt-8 mb-4 opacity-50" />
+                        <p className="px-4 text-[10px] leading-relaxed italic text-slate-400">
+                          {receiptSettings.footerText || "Thank you for your business!"}
+                        </p>
+                      </div>
                     </div>
-                    <div>{businessSettings.phone}</div>
-                    <div>{businessSettings.email}</div>
-                    <div>{businessSettings.website}</div>
-                  </div>
-
-                  <Separator className="my-3" />
-
-                  {/* Sample Items */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between">
-                      <span>Sample Product 1</span>
-                      <span>{systemSettings.currencySymbol}25.00</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span>Sample Product 2</span>
-                      <span>{systemSettings.currencySymbol}15.50</span>
-                    </div>
-                  </div>
-
-                  <Separator className="my-3" />
-
-                  {/* Totals */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between">
-                      <span>Subtotal:</span>
-                      <span>{systemSettings.currencySymbol}40.50</span>
-                    </div>
-                    <div className="flex justify-between font-bold">
-                      <span>Total:</span>
-                      <span>{systemSettings.currencySymbol}44.55</span>
-                    </div>
-                  </div>
-
-                  <Separator className="my-3" />
-
-                  {/* Footer */}
-                  <div className="text-center text-xs space-y-1">
-                    <div className="mt-2 text-gray-600">{receiptSettings.footerText}</div>
                   </div>
                 </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
       </div>
-    </div>
+    </motion.div>
   )
 }

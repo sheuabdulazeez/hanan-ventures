@@ -27,7 +27,8 @@ import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { Edit, Save, X } from "lucide-react";
+import { Edit, Save, X, User, Phone, Mail, MapPin, Calendar, Clock, DollarSign, History } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface CustomerDetailsProps {
   customer: TCustomer;
@@ -109,229 +110,282 @@ export function CustomerDetails({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-2xl">
-        <SheetHeader>
-          <div className="flex items-center gap-4">
-            <SheetTitle>Customer Details</SheetTitle>
-            {!isEditing ? (
-               <Button
-                 variant="outline"
-                 size="sm"
-                 onClick={() => setIsEditing(true)}
-                 data-edit-button
-               >
-                 <Edit className="h-4 w-4 mr-2" />
-                 Edit
-               </Button>
-            ) : (
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCancelEdit}
-                >
-                  <X className="h-4 w-4 mr-2" />
-                  Cancel
-                </Button>
-                <Button
-                  size="sm"
-                  onClick={handleSaveEdit}
-                >
-                  <Save className="h-4 w-4 mr-2" />
-                  Save
-                </Button>
+      <SheetContent className="bg-slate-50 border-l border-slate-200 sm:max-w-2xl p-0">
+        <div className="h-full flex flex-col">
+          <SheetHeader className="p-6 bg-white border-b border-slate-100">
+            <div className="flex items-center justify-between">
+              <div>
+                <SheetTitle className="text-xl font-black text-slate-900">Customer Details</SheetTitle>
+                <SheetDescription className="text-slate-500 font-medium">Manage and view profile information</SheetDescription>
               </div>
-            )}
-          </div>
-        </SheetHeader>
-        <Tabs defaultValue="info" className="mt-6">
-          <TabsList>
-            <TabsTrigger value="info">Information</TabsTrigger>
-            <TabsTrigger value="debt">Debt History</TabsTrigger>
-          </TabsList>
-          <TabsContent value="info">
-            <div className="space-y-4">
-              <Card>
-                <CardContent className="pt-6">
-                  {isEditing ? (
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <Label htmlFor="name">Full Name</Label>
-                          <Input
-                            id="name"
-                            value={editForm.name}
-                            onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                            placeholder="Enter full name"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="phone">Phone Number</Label>
-                          <Input
-                            id="phone"
-                            value={editForm.phone}
-                            onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
-                            placeholder="Enter phone number"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="email">Email</Label>
-                          <Input
-                            id="email"
-                            type="email"
-                            value={editForm.email}
-                            onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
-                            placeholder="Enter email address"
-                          />
-                        </div>
-                        <div>
-                          <Label htmlFor="address">Address</Label>
-                          <Input
-                            id="address"
-                            value={editForm.address}
-                            onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
-                            placeholder="Enter address"
-                          />
-                        </div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm text-muted-foreground">Full Name</p>
-                        <p className="text-lg font-semibold">{customer.name}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Phone Number
-                        </p>
-                        <p className="text-lg font-semibold">{customer.phone}</p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Email</p>
-                        <p className="text-lg font-semibold">
-                          {customer.email || "N/A"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">Address</p>
-                        <p className="text-lg font-semibold">
-                          {customer.address || "N/A"}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm text-muted-foreground">
-                          Created At
-                        </p>
-                        <p className="text-lg font-semibold">
-                          {format(new Date(customer.created_at), "MMM dd, yyyy")}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </div>
-          </TabsContent>
-          <TabsContent value="debt" className="h-screen">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold">Debt History</h3>
-              <PrintDebtStatementButton 
-                customer={customer} 
-                debtHistory={debtHistory}
-              />
-            </div>
-            <ScrollArea className="h-[98vh] pb-32">
-              <div className="space-y-4">
-                {debtHistory.length > 0 ? (
-                  debtHistory.map((debt) => (
-                    <Card key={debt.id}>
-                      <CardHeader>
-                        <div className="flex justify-between items-center">
-                          <CardTitle className="text-sm font-medium">
-                            Debt Record
-                          </CardTitle>
-                          <Badge
-                            variant={debt.is_paid ? "default" : "destructive"}
-                          >
-                            {debt.is_paid ? "Paid" : "Outstanding"}
-                          </Badge>
-                        </div>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <p className="text-sm text-muted-foreground">
-                                Original Amount
-                              </p>
-                              <p className="text-lg font-semibold">
-                                ₦{debt.amount_owed.toFixed(2)}
-                              </p>
-                            </div>
-                            <div>
-                              <p className="text-sm text-muted-foreground">
-                                Due Date
-                              </p>
-                              <p className="text-lg">
-                                {format(new Date(debt.due_date), "MMM dd, yyyy")}
-                              </p>
-                            </div>
-                          </div>
-
-                          {debt.payments && debt.payments.length > 0 && (
-                            <div>
-                              <h4 className="text-sm font-semibold mb-2">
-                                Payment History
-                              </h4>
-                              <Table>
-                                <TableHeader>
-                                  <TableRow>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead>Amount</TableHead>
-                                    <TableHead>Method</TableHead>
-                                    <TableHead>Cashier</TableHead>
-                                  </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                  {debt.payments
-                                    ?.sort((a: any, b: any) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime())
-                                    .map((payment: any) => (
-                                    <TableRow key={payment.id}>
-                                      <TableCell>
-                                        {format(
-                                          new Date(payment.payment_date),
-                                          "MMM dd, yyyy"
-                                        )}
-                                      </TableCell>
-                                      <TableCell>
-                                        ₦{payment.amount_paid.toFixed(2)}
-                                      </TableCell>
-                                      <TableCell>
-                                        {payment.payment_method}
-                                      </TableCell>
-                                      <TableCell>
-                                        {payment.employee_name}
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </div>
-                          )}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))
+              <div className="flex gap-2">
+                {!isEditing ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-9 px-4 text-[10px] font-black uppercase tracking-widest text-slate-600 hover:text-slate-900 border-slate-200"
+                    onClick={() => setIsEditing(true)}
+                    data-edit-button
+                  >
+                    <Edit className="h-3.5 w-3.5 mr-2" />
+                    Edit Profile
+                  </Button>
                 ) : (
-                  <div className="text-center py-6 text-muted-foreground">
-                    No debt history found for this customer.
-                  </div>
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-9 px-4 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600"
+                      onClick={handleCancelEdit}
+                    >
+                      <X className="h-3.5 w-3.5 mr-2" />
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-9 px-4 text-[10px] font-black uppercase tracking-widest bg-slate-900 hover:bg-slate-800 text-white"
+                      onClick={handleSaveEdit}
+                    >
+                      <Save className="h-3.5 w-3.5 mr-2" />
+                      Save Changes
+                    </Button>
+                  </>
                 )}
               </div>
+            </div>
+          </SheetHeader>
+
+          <Tabs defaultValue="info" className="flex-1 flex flex-col">
+            <div className="bg-white px-6 pb-0 border-b border-slate-100">
+              <TabsList className="bg-transparent h-12 p-0 gap-6">
+                <TabsTrigger
+                  value="info"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-slate-900 data-[state=active]:bg-transparent data-[state=active]:shadow-none text-xs font-black uppercase tracking-widest text-slate-400 data-[state=active]:text-slate-900 px-0 h-10"
+                >
+                  Information
+                </TabsTrigger>
+                <TabsTrigger
+                  value="debt"
+                  className="rounded-none border-b-2 border-transparent data-[state=active]:border-slate-900 data-[state=active]:bg-transparent data-[state=active]:shadow-none text-xs font-black uppercase tracking-widest text-slate-400 data-[state=active]:text-slate-900 px-0 h-10"
+                >
+                  Debt History
+                </TabsTrigger>
+              </TabsList>
+            </div>
+
+            <ScrollArea className="flex-1">
+              <div className="p-6">
+                <AnimatePresence mode="wait">
+                  <TabsContent value="info" className="mt-0 space-y-6">
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="space-y-6"
+                    >
+                      <Card className="border border-slate-200 bg-white shadow-sm">
+                        <CardHeader className="p-6 border-b border-slate-50">
+                          <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center">
+                            <User className="w-3.5 h-3.5 mr-2" />
+                            Personal Information
+                          </CardTitle>
+                        </CardHeader>
+                        <CardContent className="p-6">
+                          {isEditing ? (
+                            <div className="grid grid-cols-2 gap-6">
+                              <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Full Name</Label>
+                                <Input
+                                  value={editForm.name}
+                                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                                  className="h-11 bg-slate-50 border-slate-200 focus:bg-white font-bold text-slate-700"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Phone Number</Label>
+                                <Input
+                                  value={editForm.phone}
+                                  onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })}
+                                  className="h-11 bg-slate-50 border-slate-200 focus:bg-white font-bold text-slate-700"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Email Address</Label>
+                                <Input
+                                  type="email"
+                                  value={editForm.email}
+                                  onChange={(e) => setEditForm({ ...editForm, email: e.target.value })}
+                                  className="h-11 bg-slate-50 border-slate-200 focus:bg-white font-bold text-slate-700"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Address</Label>
+                                <Input
+                                  value={editForm.address}
+                                  onChange={(e) => setEditForm({ ...editForm, address: e.target.value })}
+                                  className="h-11 bg-slate-50 border-slate-200 focus:bg-white font-bold text-slate-700"
+                                />
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="grid grid-cols-2 gap-x-8 gap-y-6">
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center">
+                                  <User className="w-3 w-3 mr-1.5" /> Name
+                                </p>
+                                <p className="text-sm font-black text-slate-900">{customer.name}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center">
+                                  <Phone className="w-3 w-3 mr-1.5" /> Phone
+                                </p>
+                                <p className="text-sm font-black text-slate-900">{customer.phone || "N/A"}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center">
+                                  <Mail className="w-3 w-3 mr-1.5" /> Email
+                                </p>
+                                <p className="text-sm font-black text-slate-900">{customer.email || "N/A"}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center">
+                                  <MapPin className="w-3 w-3 mr-1.5" /> Address
+                                </p>
+                                <p className="text-sm font-black text-slate-900">{customer.address || "N/A"}</p>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center">
+                                  <Calendar className="w-3 w-3 mr-1.5" /> Created At
+                                </p>
+                                <p className="text-sm font-black text-slate-900">{format(new Date(customer.created_at), "MMM dd, yyyy")}</p>
+                              </div>
+                            </div>
+                          )}
+                        </CardContent>
+                      </Card>
+                    </motion.div>
+                  </TabsContent>
+
+                  <TabsContent value="debt" className="mt-0">
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -10 }}
+                      className="space-y-6"
+                    >
+                      <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-slate-200">
+                        <div className="flex items-center space-x-3">
+                          <div className="p-2 bg-slate-900 rounded-lg text-white">
+                            <History className="h-4 w-4" />
+                          </div>
+                          <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest">Debt Records</h3>
+                        </div>
+                        <PrintDebtStatementButton
+                          customer={customer}
+                          debtHistory={debtHistory}
+                        />
+                      </div>
+
+                      <div className="space-y-4">
+                        {debtHistory.length > 0 ? (
+                          debtHistory.map((debt, index) => (
+                            <motion.div
+                              key={debt.id}
+                              initial={{ opacity: 0, x: -10 }}
+                              animate={{ opacity: 1, x: 0 }}
+                              transition={{ delay: index * 0.05 }}
+                            >
+                              <Card className="border border-slate-200 bg-white shadow-sm overflow-hidden">
+                                <CardHeader className="bg-slate-50/50 p-4 border-b border-slate-100 flex flex-row items-center justify-between">
+                                  <CardTitle className="text-[10px] font-black uppercase tracking-widest text-slate-900 flex items-center m-0">
+                                    <Clock className="w-3.5 h-3.5 mr-2 text-slate-400" />
+                                    Record #{debt.id.substring(0, 8)}
+                                  </CardTitle>
+                                  <Badge
+                                    className={`text-[9px] font-black uppercase h-5 px-2 ${debt.is_paid
+                                      ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                                      : "bg-red-50 text-red-600 border-red-100"
+                                      }`}
+                                    variant="outline"
+                                  >
+                                    {debt.is_paid ? "Paid" : "Outstanding"}
+                                  </Badge>
+                                </CardHeader>
+                                <CardContent className="p-4">
+                                  <div className="grid grid-cols-2 gap-4 pb-4 mb-4 border-b border-slate-50">
+                                    <div className="space-y-1">
+                                      <p className="text-[9px] font-black uppercase text-slate-400 flex items-center tracking-tighter">
+                                        <DollarSign className="w-3 h-3 mr-1" /> Original Amount
+                                      </p>
+                                      <p className="text-xl font-black text-slate-900">
+                                        ₦{debt.amount_owed.toFixed(2)}
+                                      </p>
+                                    </div>
+                                    <div className="space-y-1">
+                                      <p className="text-[9px] font-black uppercase text-slate-400 flex items-center tracking-tighter">
+                                        <Calendar className="w-3 h-3 mr-1" /> Due Date
+                                      </p>
+                                      <p className="text-sm font-bold text-slate-700">
+                                        {format(new Date(debt.due_date), "MMM dd, yyyy")}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  {debt.payments && debt.payments.length > 0 && (
+                                    <div className="space-y-3">
+                                      <h4 className="text-[9px] font-black uppercase tracking-widest text-slate-900">
+                                        Payment Logs
+                                      </h4>
+                                      <div className="rounded-lg border border-slate-100 overflow-hidden">
+                                        <Table>
+                                          <TableHeader>
+                                            <TableRow className="bg-slate-50/50 h-8 border-slate-100">
+                                              <TableHead className="text-[8px] font-black uppercase px-3">Date</TableHead>
+                                              <TableHead className="text-[8px] font-black uppercase">Amount</TableHead>
+                                              <TableHead className="text-[8px] font-black uppercase text-right px-3">Method</TableHead>
+                                            </TableRow>
+                                          </TableHeader>
+                                          <TableBody>
+                                            {debt.payments
+                                              ?.sort((a: any, b: any) => new Date(b.payment_date).getTime() - new Date(a.payment_date).getTime())
+                                              .map((payment: any) => (
+                                                <TableRow key={payment.id} className="h-10 hover:bg-slate-50/50 border-slate-50">
+                                                  <TableCell className="text-[10px] font-bold text-slate-600 px-3">
+                                                    {format(new Date(payment.payment_date), "MMM dd, yy")}
+                                                  </TableCell>
+                                                  <TableCell className="text-[10px] font-black text-emerald-600">
+                                                    ₦{payment.amount_paid.toFixed(2)}
+                                                  </TableCell>
+                                                  <TableCell className="text-right px-3">
+                                                    <Badge variant="secondary" className="text-[8px] font-black uppercase h-4 px-1 bg-slate-100 text-slate-500">
+                                                      {payment.payment_method}
+                                                    </Badge>
+                                                  </TableCell>
+                                                </TableRow>
+                                              ))}
+                                          </TableBody>
+                                        </Table>
+                                      </div>
+                                    </div>
+                                  )}
+                                </CardContent>
+                              </Card>
+                            </motion.div>
+                          ))
+                        ) : (
+                          <div className="flex flex-col items-center justify-center p-12 bg-white rounded-xl border border-dashed border-slate-200">
+                            <History className="w-12 h-12 text-slate-100 mb-4" />
+                            <p className="text-xs font-black uppercase tracking-widest text-slate-300">No debt history records</p>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  </TabsContent>
+                </AnimatePresence>
+              </div>
             </ScrollArea>
-          </TabsContent>
-        </Tabs>
+          </Tabs>
+        </div>
       </SheetContent>
     </Sheet>
   );

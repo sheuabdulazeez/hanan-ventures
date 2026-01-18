@@ -5,10 +5,22 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { TrendingUp, TrendingDown, DollarSign, Calculator } from 'lucide-react';
-import { 
-  ProfitData, 
-  ProfitByPeriod, 
+import {
+  TrendingUp,
+  TrendingDown,
+  DollarSign,
+  Calculator,
+  Calendar,
+  BarChart4,
+  ArrowRight,
+  PieChart,
+  Target,
+  FileText,
+  Package
+} from 'lucide-react';
+import {
+  ProfitData,
+  ProfitByPeriod,
   ProductProfitability,
   getTodayProfit,
   getYesterdayProfit,
@@ -21,6 +33,9 @@ import {
 import { useToast } from '@/hooks/use-toast';
 import { PrintProfitReportButton } from '@/components/PrintProfitReportButton';
 import { getAdminSettings } from '@/database/settings';
+import { motion, AnimatePresence } from 'framer-motion';
+import { format } from 'date-fns';
+import { Badge } from '@/components/ui/badge';
 
 type PeriodType = 'today' | 'yesterday' | 'week' | 'month' | 'custom';
 
@@ -86,15 +101,11 @@ const ProfitPage: React.FC = () => {
       }
 
       setProfitData(data);
-      
-      // Fetch additional data for detailed view
       const breakdown = await getDailyProfitBreakdown(startDate, endDate);
       const productData = await getProductProfitability(startDate, endDate);
-      
       setDailyBreakdown(breakdown);
       setProductProfitability(productData);
     } catch (error) {
-      console.error('Error fetching profit data:', error);
       toast({
         title: "Error",
         description: "Failed to fetch profit data. Please try again.",
@@ -114,30 +125,22 @@ const ProfitPage: React.FC = () => {
         console.error('Error loading settings:', error);
       }
     };
-    
     loadSettings();
-    
     if (selectedPeriod !== 'custom') {
       fetchProfitData();
     } else {
-      // Clear data when switching to custom period
       setProfitData(null);
       setDailyBreakdown([]);
       setProductProfitability([]);
     }
   }, [selectedPeriod]);
 
-
-
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-NG', {
       style: 'currency',
-      currency: 'NGN'
+      currency: 'NGN',
+      maximumFractionDigits: 0
     }).format(amount);
-  };
-
-  const formatPercentage = (percentage: number) => {
-    return `${percentage.toFixed(2)}%`;
   };
 
   const getPeriodLabel = () => {
@@ -152,242 +155,268 @@ const ProfitPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-bold text-gray-800">Profit Analysis</h1>
-        <PrintProfitReportButton 
-          profitData={profitData}
-          dailyBreakdown={dailyBreakdown}
-          productProfitability={productProfitability}
-          periodLabel={getPeriodLabel()}
-          settings={settings}
-          disabled={!profitData || !settings}
-        />
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      className="min-h-screen bg-slate-50/50"
+    >
+      {/* Header Section */}
+      <div className="bg-white border-b border-slate-200">
+        <div className="container mx-auto px-6 py-10">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <div>
+              <h1 className="text-4xl font-black text-slate-900 mb-2">Profit Analysis</h1>
+              <p className="text-slate-500 font-medium tracking-tight">Financial performance overview for {getPeriodLabel()}</p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                <Select value={selectedPeriod} onValueChange={(value: PeriodType) => setSelectedPeriod(value)}>
+                  <SelectTrigger className="w-[140px] h-9 bg-white border-slate-200 text-xs font-black uppercase tracking-widest">
+                    <SelectValue placeholder="Period" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-white">
+                    <SelectItem value="today" className="text-[10px] font-black uppercase tracking-widest">Today</SelectItem>
+                    <SelectItem value="yesterday" className="text-[10px] font-black uppercase tracking-widest">Yesterday</SelectItem>
+                    <SelectItem value="week" className="text-[10px] font-black uppercase tracking-widest">This Week</SelectItem>
+                    <SelectItem value="month" className="text-[10px] font-black uppercase tracking-widest">This Month</SelectItem>
+                    <SelectItem value="custom" className="text-[10px] font-black uppercase tracking-widest">Custom</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {selectedPeriod === 'custom' && (
+                <div className="flex items-center gap-2">
+                  <Input type="date" value={customStartDate} onChange={(e) => setCustomStartDate(e.target.value)} className="h-11 bg-white border-slate-200 text-xs font-bold" />
+                  <ArrowRight className="w-4 h-4 text-slate-300" />
+                  <Input type="date" value={customEndDate} onChange={(e) => setCustomEndDate(e.target.value)} className="h-11 bg-white border-slate-200 text-xs font-bold" />
+                  <Button onClick={fetchProfitData} className="bg-slate-900 text-white h-11 px-6 font-black uppercase tracking-widest text-[10px]">Generate</Button>
+                </div>
+              )}
+
+              <PrintProfitReportButton
+                profitData={profitData}
+                dailyBreakdown={dailyBreakdown}
+                productProfitability={productProfitability}
+                periodLabel={getPeriodLabel()}
+                settings={settings}
+                disabled={!profitData || !settings}
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
-      {/* Period Selection */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Select Period</CardTitle>
-          <CardDescription>Choose the time period for profit analysis</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-wrap gap-4 items-end">
-            <div className="space-y-2">
-              <Label htmlFor="period">Period</Label>
-              <Select value={selectedPeriod} onValueChange={(value: PeriodType) => setSelectedPeriod(value)}>
-                <SelectTrigger className="w-[180px]">
-                  <SelectValue placeholder="Select period" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="today">Today</SelectItem>
-                  <SelectItem value="yesterday">Yesterday</SelectItem>
-                  <SelectItem value="week">This Week</SelectItem>
-                  <SelectItem value="month">This Month</SelectItem>
-                  <SelectItem value="custom">Custom Range</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+      <div className="container mx-auto px-6 py-8">
+        <AnimatePresence mode="wait">
+          {profitData ? (
+            <motion.div
+              key="report-content"
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="space-y-8"
+            >
+              {/* Primary Metrics Grid */}
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
+                <Card className="bg-white border-slate-200 shadow-sm overflow-hidden group">
+                  <CardContent className="p-6">
+                    <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-900 mb-4 group-hover:scale-110 transition-transform">
+                      <DollarSign className="w-5 h-5" />
+                    </div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Revenue</p>
+                    <p className="text-2xl font-black text-slate-900 mt-1">{formatCurrency(profitData.totalRevenue)}</p>
+                  </CardContent>
+                </Card>
 
-            {selectedPeriod === 'custom' && (
-              <>
-                <div className="space-y-2">
-                  <Label htmlFor="startDate">Start Date</Label>
-                  <Input
-                    id="startDate"
-                    type="date"
-                    value={customStartDate}
-                    onChange={(e) => setCustomStartDate(e.target.value)}
-                    className="w-[150px]"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="endDate">End Date</Label>
-                  <Input
-                    id="endDate"
-                    type="date"
-                    value={customEndDate}
-                    onChange={(e) => setCustomEndDate(e.target.value)}
-                    className="w-[150px]"
-                  />
-                </div>
-                <Button onClick={fetchProfitData} disabled={loading}>
-                  {loading ? 'Loading...' : 'Generate Report'}
-                </Button>
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
+                <Card className="bg-white border-slate-200 shadow-sm overflow-hidden group">
+                  <CardContent className="p-6">
+                    <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 mb-4 group-hover:scale-110 transition-transform">
+                      <Calculator className="w-5 h-5" />
+                    </div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Stock Cost</p>
+                    <p className="text-2xl font-black text-slate-400 mt-1">{formatCurrency(profitData.totalCost)}</p>
+                  </CardContent>
+                </Card>
 
-      {/* Profit Report */}
-      {(profitData || selectedPeriod !== 'custom') && (
-        <div id="profit-report">
-          <div className="header">
-            <h2 className="text-2xl font-bold">Profit Report - {getPeriodLabel()}</h2>
-            <p className="text-gray-600">Generated on {new Date().toLocaleDateString()}</p>
-          </div>
+                <Card className="bg-white border-slate-200 shadow-sm overflow-hidden group">
+                  <CardContent className="p-6">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 mb-4 group-hover:scale-110 transition-transform">
+                      <TrendingUp className="w-5 h-5" />
+                    </div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-emerald-600">Gross Profit</p>
+                    <p className="text-2xl font-black text-emerald-600 mt-1">{formatCurrency(profitData.grossProfit)}</p>
+                  </CardContent>
+                </Card>
 
-          {profitData && (
-          <>
-            {/* Key Metrics */}
-            <div className="metrics grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
-                  <DollarSign className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{formatCurrency(profitData.totalRevenue)}</div>
-                </CardContent>
-              </Card>
+                <Card className="bg-white border-slate-200 shadow-sm overflow-hidden group">
+                  <CardContent className="p-6">
+                    <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center text-red-600 mb-4 group-hover:scale-110 transition-transform">
+                      <TrendingDown className="w-5 h-5" />
+                    </div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-red-600">Total Expenses</p>
+                    <p className="text-2xl font-black text-red-600 mt-1">{formatCurrency(profitData.totalExpenses)}</p>
+                  </CardContent>
+                </Card>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Cost</CardTitle>
-                  <Calculator className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-red-600">{formatCurrency(profitData.totalCost)}</div>
-                </CardContent>
-              </Card>
+                <Card className="bg-slate-900 border-slate-800 shadow-xl overflow-hidden group">
+                  <CardContent className="p-6">
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-white group-hover:scale-110 transition-transform">
+                        <Target className="w-5 h-5" />
+                      </div>
+                      <Badge className="bg-white/10 text-white border-none text-[8px] font-black uppercase">{profitData.profitMargin.toFixed(1)}% Margin</Badge>
+                    </div>
+                    <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Net Profit</p>
+                    <p className={`text-2xl font-black mt-1 ${profitData.netProfit >= 0 ? 'text-white' : 'text-red-400'}`}>
+                      {formatCurrency(profitData.netProfit)}
+                    </p>
+                  </CardContent>
+                </Card>
+              </div>
 
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Gross Profit</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className={`text-2xl font-bold ${profitData.grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatCurrency(profitData.grossProfit)}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Expenses</CardTitle>
-                  <TrendingDown className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold text-red-600">{formatCurrency(profitData.totalExpenses)}</div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Net Profit</CardTitle>
-                  <TrendingUp className="h-4 w-4 text-muted-foreground" />
-                </CardHeader>
-                <CardContent>
-                  <div className={`text-2xl font-bold ${profitData.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {formatCurrency(profitData.netProfit)}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Margin: {formatPercentage(profitData.profitMargin)}
-                  </p>
-                </CardContent>
-              </Card>
-            </div>
-
-            {/* Daily Breakdown */}
-            {dailyBreakdown.length > 0 && (
-              <Card className="mb-6">
-                <CardHeader>
-                  <CardTitle>Daily Breakdown</CardTitle>
-                  <CardDescription>Daily profit and loss breakdown for the selected period</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Date</TableHead>
-                        <TableHead>Revenue</TableHead>
-                        <TableHead>Cost</TableHead>
-                        <TableHead>Gross Profit</TableHead>
-                        <TableHead>Expenses</TableHead>
-                        <TableHead>Net Profit</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {dailyBreakdown.map((day) => (
-                        <TableRow key={day.date}>
-                          <TableCell>{new Date(day.date).toLocaleDateString()}</TableCell>
-                          <TableCell>{formatCurrency(day.revenue)}</TableCell>
-                          <TableCell className="text-red-600">{formatCurrency(day.cost)}</TableCell>
-                          <TableCell className={day.grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}>
-                            {formatCurrency(day.grossProfit)}
-                          </TableCell>
-                          <TableCell className="text-red-600">{formatCurrency(day.expenses)}</TableCell>
-                          <TableCell className={day.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}>
-                            {formatCurrency(day.netProfit)}
-                          </TableCell>
+              {/* Detailed Breakdown Section */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Daily Breakdown */}
+                <Card className="bg-white border-slate-200 shadow-sm">
+                  <CardHeader className="p-6 border-b border-slate-50 flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-900">Daily Trajectory</CardTitle>
+                      <CardDescription className="text-[10px] font-bold text-slate-400 mt-1">Period performance over time</CardDescription>
+                    </div>
+                    <BarChart4 className="w-5 h-5 text-slate-300" />
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent border-slate-100">
+                          <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-6">Date</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Revenue</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Expenses</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 text-right px-6">Net</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            )}
+                      </TableHeader>
+                      <TableBody>
+                        {dailyBreakdown.map((day) => (
+                          <TableRow key={day.date} className="group hover:bg-slate-50 border-slate-50 transition-colors">
+                            <TableCell className="px-6 py-4">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="w-3.5 h-3.5 text-slate-300" />
+                                <p className="text-xs font-bold text-slate-700">{format(new Date(day.date), 'MMM dd')}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right py-4">
+                              <p className="text-xs font-black text-slate-900">{formatCurrency(day.revenue)}</p>
+                            </TableCell>
+                            <TableCell className="text-right py-4">
+                              <p className="text-xs font-bold text-slate-400">{formatCurrency(day.expenses)}</p>
+                            </TableCell>
+                            <TableCell className="text-right px-6 py-4">
+                              <p className={`text-xs font-black ${day.netProfit >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                                {formatCurrency(day.netProfit)}
+                              </p>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {dailyBreakdown.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={4} className="h-40 text-center">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">No data for this period</p>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
 
-            {/* Product Profitability */}
-            {productProfitability.length > 0 && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>Product Profitability</CardTitle>
-                  <CardDescription>Profit analysis by product for the selected period</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Product</TableHead>
-                        <TableHead>Quantity Sold</TableHead>
-                        <TableHead>Revenue</TableHead>
-                        <TableHead>Cost</TableHead>
-                        <TableHead>Gross Profit</TableHead>
-                        <TableHead>Profit Margin</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {productProfitability.map((product) => (
-                        <TableRow key={product.productName}>
-                          <TableCell className="font-medium">{product.productName}</TableCell>
-                          <TableCell>{product.quantitySold}</TableCell>
-                          <TableCell>{formatCurrency(product.totalRevenue)}</TableCell>
-                          <TableCell className="text-red-600">{formatCurrency(product.totalCost)}</TableCell>
-                          <TableCell className={product.grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}>
-                            {formatCurrency(product.grossProfit)}
-                          </TableCell>
-                          <TableCell className={product.profitMargin >= 0 ? 'text-green-600' : 'text-red-600'}>
-                            {formatPercentage(product.profitMargin)}
-                          </TableCell>
+                {/* Product Profitability */}
+                <Card className="bg-white border-slate-200 shadow-sm">
+                  <CardHeader className="p-6 border-b border-slate-50 flex flex-row items-center justify-between">
+                    <div>
+                      <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-900">Product Efficiency</CardTitle>
+                      <CardDescription className="text-[10px] font-bold text-slate-400 mt-1">Highest grossing inventory items</CardDescription>
+                    </div>
+                    <PieChart className="w-5 h-5 text-slate-300" />
+                  </CardHeader>
+                  <CardContent className="p-0">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="hover:bg-transparent border-slate-100">
+                          <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-6">Item</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Sold</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 text-right">Margin%</TableHead>
+                          <TableHead className="text-[10px] font-black uppercase tracking-widest text-slate-400 text-right px-6">Profit</TableHead>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </CardContent>
-              </Card>
-            )}
-          </>
-        )}
-
-          {loading && (
-            <div className="flex justify-center items-center py-8">
-              <div className="text-lg">Loading profit data...</div>
-            </div>
+                      </TableHeader>
+                      <TableBody>
+                        {productProfitability.map((product) => (
+                          <TableRow key={product.productName} className="group hover:bg-slate-50 border-slate-50 transition-colors">
+                            <TableCell className="px-6 py-4">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-lg bg-slate-100 flex items-center justify-center text-slate-600 transition-transform group-hover:scale-110">
+                                  <Package className="w-4 h-4" />
+                                </div>
+                                <p className="text-xs font-black text-slate-900 leading-tight">{product.productName}</p>
+                              </div>
+                            </TableCell>
+                            <TableCell className="text-right py-4">
+                              <Badge className="bg-slate-50 text-slate-900 border-slate-200 text-[10px] font-black px-2">{product.quantitySold}</Badge>
+                            </TableCell>
+                            <TableCell className="text-right py-4">
+                              <p className={`text-[10px] font-black ${product.profitMargin >= 30 ? 'text-emerald-500' : 'text-slate-400'}`}>
+                                {product.profitMargin.toFixed(1)}%
+                              </p>
+                            </TableCell>
+                            <TableCell className="text-right px-6 py-4">
+                              <p className="text-xs font-black text-slate-900">{formatCurrency(product.grossProfit)}</p>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                        {productProfitability.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={4} className="h-40 text-center">
+                              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">No inventory activity</p>
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
+                  </CardContent>
+                </Card>
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="empty-state"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="flex items-center justify-center h-96"
+            >
+              <div className="text-center group">
+                <div className="w-20 h-20 rounded-3xl bg-white border border-slate-200 shadow-sm flex items-center justify-center text-slate-200 mx-auto mb-6 group-hover:scale-110 transition-transform">
+                  <FileText className="w-10 h-10" />
+                </div>
+                <h3 className="text-xl font-black text-slate-900 mb-2 uppercase tracking-widest">Awaiting Analysis Parameters</h3>
+                <p className="text-slate-500 font-medium max-w-sm mx-auto leading-relaxed">
+                  {selectedPeriod === 'custom'
+                    ? "Specify a date range above and click generate to build your comprehensive profit analysis report."
+                    : "Fetching financial data for your selected period. This usually takes just a moment."}
+                </p>
+              </div>
+            </motion.div>
           )}
-        </div>
-      )}
+        </AnimatePresence>
 
-      {selectedPeriod === 'custom' && !profitData && !loading && (
-        <Card>
-          <CardContent className="flex flex-col items-center justify-center py-8">
-            <p className="text-lg text-gray-600 mb-4">Select a date range and click "Generate Report" to view profit analysis.</p>
-          </CardContent>
-        </Card>
-      )}
-    </div>
+        {loading && (
+          <div className="fixed inset-0 bg-white/60 backdrop-blur-sm z-50 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-4">
+              <div className="w-12 h-12 border-4 border-slate-200 border-t-slate-900 rounded-full animate-spin" />
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-900">Synchronizing Ledger Data...</p>
+            </div>
+          </div>
+        )}
+      </div>
+    </motion.div>
   );
 };
 
