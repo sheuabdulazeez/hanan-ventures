@@ -22,7 +22,7 @@ export default function PrintInvoiceButton(props: InvoiceModalProps) {
 
   const onClick = async () => {
     let customerDebt = null;
-    
+
     // Fetch customer debt information if it's not a walk-in customer
     // if (sale.customer_id && sale.customer_id !== 'WALK-IN') {
     //   try {
@@ -31,14 +31,14 @@ export default function PrintInvoiceButton(props: InvoiceModalProps) {
     //     console.error('Failed to load customer debt:', error);
     //   }
     // }
-    
+
     const htmlContent = enhancedInvoiceHtml(sale, items, {
       businessInfo,
       receiptSettings,
       systemSettings,
     }, customerDebt || undefined);
 
-     printWindow.current = new WebviewWindow("print", {
+    printWindow.current = new WebviewWindow("print", {
       url: "/print.html",
       width: 800,
       height: 600,

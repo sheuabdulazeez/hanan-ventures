@@ -47,18 +47,18 @@ export interface SalesByCashier {
 
 export async function getDashboardMetrics(cashierId?: string) {
     const db = await initDatabase();
-    
+
     try {
         const [metrics] = await db.select<[DashboardMetrics]>(`
             SELECT 
-                (SELECT COALESCE(SUM(total_amount), 0) FROM sales ${cashierId ? `WHERE employee_id = "${cashierId}"`:""}) as totalSales,
+                (SELECT COALESCE(SUM(total_amount), 0) FROM sales ${cashierId ? `WHERE employee_id = "${cashierId}"` : ""}) as totalSales,
                 (SELECT COUNT(*) FROM customers WHERE id != 'WALK-IN') as totalCustomers,
                 (SELECT COUNT(*) FROM products) as totalProducts,
                 (SELECT COALESCE(SUM(amount_owed), 0) FROM debtors WHERE is_paid = 0) as totalDebt,
-                (SELECT COALESCE(AVG(total_amount), 0) FROM sales ${cashierId ? `WHERE employee_id = "${cashierId}"`:""}) as averageOrderValue,
+                (SELECT COALESCE(AVG(total_amount), 0) FROM sales ${cashierId ? `WHERE employee_id = "${cashierId}"` : ""}) as averageOrderValue,
                 (SELECT COALESCE(SUM(amount), 0) FROM business_expenses) as totalExpenses
         `);
-        
+
         return metrics;
     } catch (error) {
         console.error('Error fetching dashboard metrics:', error);
@@ -66,9 +66,9 @@ export async function getDashboardMetrics(cashierId?: string) {
     }
 }
 
-export async function getDailySales(cashierId?:string): Promise<DailySales[]> {
+export async function getDailySales(cashierId?: string): Promise<DailySales[]> {
     const db = await initDatabase();
-    
+
     try {
         return await db.select<DailySales[]>(`
             WITH RECURSIVE days AS (
@@ -85,7 +85,7 @@ export async function getDailySales(cashierId?:string): Promise<DailySales[]> {
             LEFT JOIN sales s ON date(s.created_at) = days.date
                 AND strftime('%m', s.created_at) = strftime('%m', 'now')
                 AND strftime('%Y', s.created_at) = strftime('%Y', 'now')
-            ${cashierId ? `AND s.employee_id = "${cashierId}"`:""}
+            ${cashierId ? `AND s.employee_id = "${cashierId}"` : ""}
             GROUP BY days.date
             ORDER BY days.date
         `);
@@ -95,9 +95,9 @@ export async function getDailySales(cashierId?:string): Promise<DailySales[]> {
     }
 }
 
-export async function getWeeklySales(cashierId?:string): Promise<WeeklySales[]> {
+export async function getWeeklySales(cashierId?: string): Promise<WeeklySales[]> {
     const db = await initDatabase();
-    
+
     try {
         return await db.select<WeeklySales[]>(`
             WITH RECURSIVE weeks AS (
@@ -122,7 +122,7 @@ export async function getWeeklySales(cashierId?:string): Promise<WeeklySales[]> 
                 AND date(s.created_at) <= weeks.end_date
                 AND strftime('%m', s.created_at) = strftime('%m', 'now')
                 AND strftime('%Y', s.created_at) = strftime('%Y', 'now')
-                ${cashierId ? `AND s.employee_id = "${cashierId}"`:""}
+                ${cashierId ? `AND s.employee_id = "${cashierId}"` : ""}
             GROUP BY weeks.week_number
             ORDER BY weeks.week_number
         `);
@@ -134,7 +134,7 @@ export async function getWeeklySales(cashierId?:string): Promise<WeeklySales[]> 
 
 export async function getMonthlySalesByCashier(): Promise<SalesByCashier[]> {
     const db = await initDatabase();
-    
+
     try {
         return await db.select<SalesByCashier[]>(`
             SELECT 
@@ -154,9 +154,28 @@ export async function getMonthlySalesByCashier(): Promise<SalesByCashier[]> {
     }
 }
 
+export async function getAllTimeSalesByCashier(): Promise<SalesByCashier[]> {
+    const db = await initDatabase();
+
+    try {
+        return await db.select<SalesByCashier[]>(`
+            SELECT 
+                u.name,
+                COALESCE(SUM(s.total_amount), 0) as amount
+            FROM users u
+            LEFT JOIN sales s ON u.id = s.employee_id 
+            GROUP BY u.id, u.name
+            ORDER BY amount DESC
+        `);
+    } catch (error) {
+        console.error('Error fetching all time sales by cashier:', error);
+        throw error;
+    }
+}
+
 export async function getTopProducts(limit: number = 5): Promise<TopProduct[]> {
     const db = await initDatabase();
-    
+
     try {
         return await db.select<TopProduct[]>(`
             SELECT 
@@ -178,7 +197,7 @@ export async function getTopProducts(limit: number = 5): Promise<TopProduct[]> {
 
 export async function getTopCustomers(limit: number = 5): Promise<TopCustomer[]> {
     const db = await initDatabase();
-    
+
     try {
         return await db.select<TopCustomer[]>(`
             SELECT 
@@ -199,9 +218,9 @@ export async function getTopCustomers(limit: number = 5): Promise<TopCustomer[]>
     }
 }
 
-export async function getRecentSales(limit: number = 5, cashierId?:string): Promise<RecentSale[]> {
+export async function getRecentSales(limit: number = 5, cashierId?: string): Promise<RecentSale[]> {
     const db = await initDatabase();
-    
+
     try {
         return await db.select<RecentSale[]>(`
             SELECT 
@@ -213,7 +232,7 @@ export async function getRecentSales(limit: number = 5, cashierId?:string): Prom
             FROM sales s
             LEFT JOIN customers c ON s.customer_id = c.id
             LEFT JOIN users u ON s.employee_id = u.id
-            ${cashierId ? `WHERE employee_id = "${cashierId}"`:""}
+            ${cashierId ? `WHERE employee_id = "${cashierId}"` : ""}
             ORDER BY s.created_at DESC
             LIMIT $1
         `, [limit]);

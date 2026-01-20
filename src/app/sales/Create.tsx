@@ -58,6 +58,48 @@ import { createSale } from "@/database/sales";
 import { useAppStore } from "@/lib/store";
 import { randomString, cn } from "@/lib/utils";
 
+// --- Helper Components ---
+const NumberInput = ({ 
+  value, 
+  onChange, 
+  className, 
+  ...props 
+}: React.InputHTMLAttributes<HTMLInputElement> & { 
+  value: number, 
+  onChange: (val: number) => void 
+}) => {
+  const [localValue, setLocalValue] = useState(value.toString());
+
+  useEffect(() => {
+    // Only sync from parent if the numeric value is different from our local parsed value
+    // This allows "1." to exist locally while parent has 1
+    if (parseFloat(localValue) !== value) {
+      setLocalValue(value.toString());
+    }
+  }, [value]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setLocalValue(val);
+    const num = parseFloat(val);
+    if (!isNaN(num)) {
+      onChange(num);
+    } else if (val === "") {
+      onChange(0);
+    }
+  };
+
+  return (
+    <input 
+      type="number" 
+      value={localValue} 
+      onChange={handleChange} 
+      className={className} 
+      {...props} 
+    />
+  );
+};
+
 // --- POS Integration Types ---
 type CommonUnit = {
   id: string;
@@ -97,7 +139,7 @@ const CATEGORIES = [
 ];
 
 export default function CreateSales() {
-  const { auth, activeSales, addActiveSale, updateActiveSale, removeActiveSale } = useAppStore();
+  const { auth, activeSales, addActiveSale, updateActiveSale, removeActiveSale, switchActiveSale } = useAppStore();
   const [customers, setCustomers] = useState<TCustomer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [currentSaleId, setCurrentSaleId] = useState<string | null>(() => activeSales.find(s => s.status === "active")?.id);
@@ -137,18 +179,27 @@ export default function CreateSales() {
     }).format(amount);
   };
 
-  const getProductUnit = (product: Product, unitId: string): ProductUnit | undefined => {
+  const getProductUnit = (product: Product, unitId: string | undefined): ProductUnit | undefined => {
+    if (!unitId) return undefined;
     return product.product_units?.find(pu => pu.unit_id === unitId);
   };
 
-  const getAvailableStock = (product: Product, unitId: string): number => {
+  const getAvailableStock = (product: Product, unitId: string | undefined): number => {
+    if (!unitId) return product.quantity_on_hand;
     const productUnit = getProductUnit(product, unitId);
     if (!productUnit) return product.quantity_on_hand; // Fallback to base
     return Math.floor(product.quantity_on_hand / productUnit.conversion_to_base);
   };
 
   const getPrimaryUnit = (product: Product): ProductUnit | undefined => {
-    return product.product_units?.find(pu => pu.is_primary) || (product.product_units?.[0]);
+    if (!product.product_units || product.product_units.length === 0) return undefined;
+    return product.product_units.find(pu => pu.is_primary) || product.product_units[0];
+  };
+
+  const getPriceForUnit = (product: Product, unitId: string | undefined): number => {
+    if (!unitId) return product.selling_price;
+    const productUnit = getProductUnit(product, unitId);
+    return productUnit ? productUnit.selling_price : product.selling_price;
   };
 
   const addPayment = (method: string) => {
@@ -222,13 +273,9 @@ export default function CreateSales() {
       return;
     }
 
-    const targetUnitId = unitId || getPrimaryUnit(product)?.unit_id || product.base_unit;
+    const primaryUnit = getPrimaryUnit(product);
+    const targetUnitId = unitId || primaryUnit?.unit_id || product.base_unit;
     const productUnit = getProductUnit(product, targetUnitId);
-
-    if (!productUnit) {
-      toast({ title: "Error", description: "Selected unit not available", variant: "destructive" });
-      return;
-    }
 
     const existingItem = currentSale.items.find(
       (item) => item.product_id === product.id && (item as any).unit_used === targetUnitId
@@ -238,19 +285,21 @@ export default function CreateSales() {
       const newQuantity = existingItem.quantity + 1;
       updateQuantity(currentSale.items.indexOf(existingItem), newQuantity);
     } else {
+      const unitPrice = productUnit ? productUnit.selling_price : product.selling_price;
+
       const newSaleItem: SALE_SaleItem & { unit_used?: string; unit_info?: CommonUnit } = {
         id: `ITEM${currentSale.items.length + 1}`,
         sale_id: currentSale.id,
         product_id: product.id,
         product: product,
         quantity: 1,
-        unit_price: productUnit.selling_price,
-        total_price: productUnit.selling_price,
-        cost_price_at_sale: product.cost_price, // This should ideally be unit-aware too if stored per-base
+        unit_price: unitPrice,
+        total_price: unitPrice,
+        cost_price_at_sale: product.cost_price,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
         unit_used: targetUnitId,
-        unit_info: productUnit.unit
+        unit_info: productUnit?.unit
       };
 
       updateCurrentSale({
@@ -320,16 +369,18 @@ export default function CreateSales() {
         const productUnit = getProductUnit(item.product, item.unit_used);
         const conversion = productUnit?.conversion_to_base || 1;
 
-        // baseQuantity is what decrments from the product table
+        // baseQuantity is what decrements from the product table
         const baseQuantity = item.quantity * conversion;
 
         return {
           product_id: item.product.id,
-          quantity: baseQuantity,
-          unit_price: item.unit_price / conversion, // Effective price per base unit
+          quantity: item.quantity, // What was sold (e.g. 1 Bag)
+          unit_price: item.unit_price,
           total_price: item.total_price,
-          cost_price_at_sale: item.cost_price_at_sale / conversion,
-          profit: item.total_price - (baseQuantity * (item.cost_price_at_sale / conversion)),
+          unit_used: item.unit_used,
+          base_quantity: baseQuantity, // Total base units consumed
+          cost_price_at_sale: item.product.cost_price, // Base unit cost
+          profit: item.total_price - (baseQuantity * item.product.cost_price),
         };
       });
 
@@ -339,7 +390,7 @@ export default function CreateSales() {
         employee_id: auth.user.id,
         total_amount: currentSale.total,
         discount: 0,
-        total_cost: saleItems.reduce((total, item) => total + item.quantity * (item.cost_price_at_sale || 0), 0),
+        total_cost: saleItems.reduce((total, item) => total + (item.base_quantity * (item.cost_price_at_sale || 0)), 0),
         gross_profit: saleItems.reduce((total, item) => total + (item.profit || 0), 0),
         payments: finalPayments,
         sale_date: new Date().toISOString(),
@@ -443,7 +494,7 @@ export default function CreateSales() {
       return;
     }
     await updateCurrentSale({ status: "paused" });
-    createNewSale();
+    await createNewSale();
     toast({ title: "Sale Paused", description: "Order has been moved to paused list" });
   };
 
@@ -591,6 +642,9 @@ export default function CreateSales() {
                     <span className="text-base font-black text-blue-600">
                       {formatCurrency(primaryUnit?.selling_price || product.selling_price)}
                     </span>
+                    {primaryUnit && (
+                      <span className="text-[10px] font-bold text-slate-400 capitalize">/ {primaryUnit.unit?.abbrev}</span>
+                    )}
                   </div>
 
                   {/* Multi-unit Selection Overlay on Hover */}
@@ -598,14 +652,14 @@ export default function CreateSales() {
                     <div className="absolute inset-x-0 bottom-0 bg-white/95 p-3 transform translate-y-full group-hover:translate-y-0 transition-transform duration-300 flex flex-wrap gap-1.5 justify-center border-t border-slate-100">
                       {product.product_units.map((pu) => (
                         <button
-                          key={pu.id}
+                          key={pu.unit_id}
                           onClick={(e) => {
                             e.stopPropagation();
                             handleAddProduct(product, pu.unit_id);
                           }}
-                          className="px-2 py-1 rounded bg-slate-50 border border-slate-200 text-[10px] font-bold text-slate-600 hover:bg-blue-600 hover:border-blue-500 hover:text-white transition-colors"
+                          className="px-2 py-1 rounded-lg bg-slate-100 hover:bg-blue-600 hover:text-white text-[9px] font-black uppercase transition-colors border border-slate-200"
                         >
-                          {pu.unit?.abbrev}
+                          {pu.unit?.abbrev || 'unit'}
                         </button>
                       ))}
                     </div>
@@ -665,9 +719,17 @@ export default function CreateSales() {
                     <div className="flex justify-between mb-2">
                       <div className="flex-1 pr-2">
                         <p className="text-xs font-bold text-slate-800 line-clamp-1">{item.product.name}</p>
-                        <p className="text-[10px] text-gray-500 mt-0.5">
-                          {formatCurrency(item.unit_price)} / {(item as any).unit_info?.abbrev || 'pc'}
-                        </p>
+                        <div className="flex items-center gap-1 mt-1">
+                          <span className="text-xs font-bold text-slate-400">₦</span>
+                          <NumberInput
+                            className="w-20 text-xs font-bold text-slate-700 bg-transparent border-b border-dashed border-slate-300 focus:border-blue-500 outline-none p-0 [&::-webkit-inner-spin-button]:appearance-none"
+                            value={item.unit_price}
+                            onChange={(val) => handleUpdatePrice(index, val)}
+                            onClick={(e) => e.stopPropagation()}
+                            step="any"
+                          />
+                          <span className="text-[10px] text-gray-400">/ {(item as any).unit_info?.abbrev || 'pc'}</span>
+                        </div>
                       </div>
                       <span className="text-xs font-black text-slate-900">{formatCurrency(item.total_price)}</span>
                     </div>
@@ -676,7 +738,12 @@ export default function CreateSales() {
                         <button className="px-2 h-full text-slate-400 hover:text-slate-600" onClick={() => updateQuantity(index, Math.max(0, item.quantity - 1))}>
                           <Minus className="w-3 h-3" />
                         </button>
-                        <span className="w-8 text-center text-xs font-bold text-slate-700">{item.quantity}</span>
+                        <NumberInput
+                          className="w-10 text-center text-xs font-bold text-slate-700 border-none focus:ring-0 p-0 h-full bg-transparent outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          value={item.quantity}
+                          onChange={(val) => updateQuantity(index, val)}
+                          step="any"
+                        />
                         <button className="px-2 h-full text-slate-400 hover:text-slate-600" onClick={() => updateQuantity(index, item.quantity + 1)}>
                           <Plus className="w-3 h-3" />
                         </button>

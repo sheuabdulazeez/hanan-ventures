@@ -19,9 +19,14 @@ import {
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import * as z from 'zod'
-import { useState } from 'react'
-import { createProduct } from '@/database/products'
+import { createProduct, getCommonUnits } from '@/database/products'
 import { useNavigate } from 'react-router'
+import { TCommonUnit, TProductUnit } from '@/types/database'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Switch } from "@/components/ui/switch"
+import { Minus, Info, LayoutGrid, Plus } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { cn } from '@/lib/utils'
 
 const formSchema = z.object({
   name: z.string().min(2, {
@@ -40,11 +45,25 @@ const formSchema = z.object({
     message: "Stock quantity must be a non-negative integer.",
   }),
   stockAlert: z.number().int().optional(),
+  unitId: z.string({
+    required_error: "Please select a primary unit.",
+  }).min(1, {
+    message: "Primary unit is required.",
+  }),
 })
 
 export default function CreateStock() {
   const navigate = useNavigate()
   const [isLoading, setIsLoading] = useState(false)
+  const [commonUnits, setCommonUnits] = useState<TCommonUnit[]>([])
+  const [enableUnitPricing, setEnableUnitPricing] = useState(false)
+
+  // Advanced units state (Additional marketable units)
+  const [productUnits, setProductUnits] = useState<Omit<TProductUnit, "id" | "product_id" | "created_at" | "updated_at">[]>([])
+
+  useEffect(() => {
+    getCommonUnits().then(setCommonUnits)
+  }, [])
 
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
@@ -55,18 +74,77 @@ export default function CreateStock() {
       salesPrice: 0,
       stock: 0,
       stockAlert: 5,
+      unitId: "", // Main Primary Unit
     }
   })
+
+  // Add a secondary unit (e.g. Cartoon, Pack)
+  const addUnitRow = () => {
+    setProductUnits([...productUnits, {
+      unit_id: "",
+      conversion_to_base: 1,
+      selling_price: 0,
+      is_primary: false // Secondary units are never primary in this simplified flow
+    }])
+  }
+
+  const removeUnitRow = (index: number) => {
+    const updated = [...productUnits]
+    updated.splice(index, 1)
+    setProductUnits(updated)
+  }
+
+  const updateUnitRow = (index: number, field: keyof typeof productUnits[0], value: any) => {
+    const updated = [...productUnits]
+    updated[index] = { ...updated[index], [field]: value }
+    setProductUnits(updated)
+  }
+
+  const applyAutoPricing = (index: number) => {
+    const updated = [...productUnits]
+    const basePrice = form.getValues('salesPrice') // Use the main Selling Price
+
+    if (basePrice > 0) {
+      // Logic: If 1 SecondaryUnit = X PrimaryUnits
+      // Then Price of SecondaryUnit = Price of PrimaryUnit * X
+      updated[index].selling_price = basePrice * updated[index].conversion_to_base
+      setProductUnits(updated)
+    }
+  }
 
   async function onSubmit(values: z.infer<typeof formSchema>) {
     setIsLoading(true)
     try {
+      // Prepare unit data
+      // The "Primary Unit" is the one selected in the main form.
+      // We construct the product_units array to include:
+      // 1. The Main Unit (as Primary)
+      // 2. Any additional units from the Matrix (if enabled)
+
+      let finalUnits: Omit<TProductUnit, "id" | "product_id" | "created_at" | "updated_at">[] | undefined = undefined;
+
+      if (values.unitId) {
+        finalUnits = [{
+          unit_id: values.unitId,
+          conversion_to_base: 1,
+          selling_price: values.salesPrice,
+          is_primary: true
+        }];
+
+        if (enableUnitPricing && productUnits.length > 0) {
+          finalUnits = [...finalUnits, ...productUnits];
+        }
+      }
+
       await createProduct({
         name: values.name,
         cost_price: values.costPrice,
         selling_price: values.salesPrice,
         category: values.category,
         quantity_on_hand: values.stock,
+        reorder_level: values.stockAlert,
+        base_unit: values.unitId || null, // The main unit is the base unit
+        product_units: finalUnits
       })
 
       toast({
@@ -75,6 +153,7 @@ export default function CreateStock() {
       })
       navigate("/dashboard/stocks")
     } catch (error) {
+      console.error('Product Creation Error:', error)
       toast({
         title: "Catalog Fault",
         description: "Failed to synchronize product data.",
@@ -84,6 +163,8 @@ export default function CreateStock() {
       setIsLoading(false)
     }
   }
+
+  const selectedUnitName = commonUnits.find(u => u.id === form.watch('unitId'))?.abbrev || 'Units';
 
   return (
     <motion.div
@@ -180,16 +261,48 @@ export default function CreateStock() {
 
                   {/* Financial Section */}
                   <div className="space-y-6">
-                    <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
-                      <DollarSign className="w-3.5 h-3.5" /> Economic Parameters
-                    </h3>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                      <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                        <DollarSign className="w-3.5 h-3.5" /> Economic Parameters
+                      </h3>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-2">
+                        Establish standard pricing for your primary unit
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                      <FormField
+                        control={form.control}
+                        name="unitId"
+                        render={({ field }) => (
+                          <FormItem className="space-y-2">
+                            <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">Primary Unit</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                              <FormControl>
+                                <SelectTrigger className="h-12 bg-slate-50 border-slate-200 font-black text-slate-900 focus:bg-white transition-colors">
+                                  <SelectValue placeholder="Select Unit" />
+                                </SelectTrigger>
+                              </FormControl>
+                              <SelectContent className="bg-white">
+                                {commonUnits.map((unit) => (
+                                  <SelectItem key={unit.id} value={unit.id} className="font-bold text-xs">
+                                    {unit.name} ({unit.abbrev})
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                            <FormMessage className="text-[10px] font-bold" />
+                          </FormItem>
+                        )}
+                      />
                       <FormField
                         control={form.control}
                         name="costPrice"
                         render={({ field }) => (
                           <FormItem className="space-y-2">
-                            <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">Acquisition Cost (₦)</FormLabel>
+                            <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                              Cost Price (per {selectedUnitName})
+                            </FormLabel>
                             <FormControl>
                               <div className="relative">
                                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₦</span>
@@ -212,7 +325,10 @@ export default function CreateStock() {
                         name="salesPrice"
                         render={({ field }) => (
                           <FormItem className="space-y-2">
-                            <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2"><TrendingUp className="w-3 h-3" /> Marketplace Price (₦)</FormLabel>
+                            <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                              <TrendingUp className="w-3 h-3" />
+                              Selling Price (per {selectedUnitName})
+                            </FormLabel>
                             <FormControl>
                               <div className="relative">
                                 <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₦</span>
@@ -233,6 +349,121 @@ export default function CreateStock() {
                     </div>
                   </div>
 
+                  {/* Advanced Unit Pricing Section */}
+                  <div className="space-y-8 pt-6 border-t border-slate-100">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-1">
+                        <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+                          <LayoutGrid className="w-3.5 h-3.5" /> Extended Unit Config
+                        </h3>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Enable bulk pricing (e.g. Cartons, Packs)</p>
+                      </div>
+                      <div className="flex items-center gap-3 bg-slate-50 px-4 py-2 rounded-2xl border border-slate-200">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-600">Advanced Matrix</span>
+                        <Switch
+                          checked={enableUnitPricing}
+                          onCheckedChange={setEnableUnitPricing}
+                        />
+                      </div>
+                    </div>
+
+                    {enableUnitPricing && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: "auto" }}
+                        className="space-y-8"
+                      >
+                        <div className="bg-slate-50/50 rounded-3xl p-8 border border-slate-200/50 space-y-6">
+                          <div className="space-y-4 pt-4">
+                            <div className="flex items-center justify-between">
+                              <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-900">Alternative Units</h4>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={addUnitRow}
+                                className="h-8 rounded-xl border-slate-200 text-[9px] font-black uppercase tracking-widest hover:border-slate-900"
+                              >
+                                <Plus className="w-3 h-3 mr-2" /> Add Protocol
+                              </Button>
+                            </div>
+
+                            <div className="space-y-3">
+                              {productUnits.map((unitRow, idx) => (
+                                <div key={idx} className="grid grid-cols-1 md:grid-cols-4 gap-3 bg-white p-4 rounded-2xl border border-slate-100 shadow-sm items-end">
+                                  <div className="space-y-2">
+                                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1">Unit Type</label>
+                                    <Select value={unitRow.unit_id} onValueChange={(v) => updateUnitRow(idx, 'unit_id', v)}>
+                                      <SelectTrigger className="h-10 bg-slate-50 border-slate-100 font-bold text-xs rounded-xl">
+                                        <SelectValue placeholder="Select" />
+                                      </SelectTrigger>
+                                      <SelectContent className="rounded-xl">
+                                        {commonUnits.filter(u => u.id !== form.watch('unitId')).map(unit => (
+                                          <SelectItem key={unit.id} value={unit.id} className="text-xs font-bold uppercase tracking-widest">{unit.abbrev}</SelectItem>
+                                        ))}
+                                      </SelectContent>
+                                    </Select>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1">
+                                      Conversion
+                                    </label>
+                                    <Input
+                                      type="number"
+                                      value={unitRow.conversion_to_base}
+                                      onChange={(e) => updateUnitRow(idx, 'conversion_to_base', parseFloat(e.target.value))}
+                                      className="h-10 bg-slate-50 border-slate-100 font-bold text-xs rounded-xl"
+                                    />
+                                    <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest px-1 italic">
+                                      {selectedUnitName}s per Unit
+                                    </p>
+                                  </div>
+                                  <div className="space-y-2">
+                                    <label className="text-[9px] font-black uppercase tracking-widest text-slate-400 px-1">Selling Price (₦)</label>
+                                    <div className="flex gap-2">
+                                      <Input
+                                        type="number"
+                                        value={unitRow.selling_price}
+                                        onChange={(e) => updateUnitRow(idx, 'selling_price', parseFloat(e.target.value))}
+                                        className="h-10 bg-slate-50 border-slate-100 font-bold text-xs rounded-xl text-emerald-600"
+                                      />
+                                      <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => applyAutoPricing(idx)}
+                                        className="h-10 px-3 rounded-xl border-slate-100 text-slate-400 hover:text-slate-900"
+                                        title="Calculate based on Primary Unit Price"
+                                      >
+                                        <TrendingUp className="w-3 h-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      type="button"
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => removeUnitRow(idx)}
+                                      className="h-10 w-10 p-0 text-slate-200 hover:text-red-500 rounded-xl"
+                                    >
+                                      <Minus className="w-4 h-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))}
+                              {productUnits.length === 0 && (
+                                <div className="text-center py-8 border-2 border-dashed border-slate-100 rounded-3xl">
+                                  <p className="text-[9px] font-black uppercase tracking-widest text-slate-300">No additional units defined</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </div>
+
                   {/* Stock Management Section */}
                   <div className="space-y-6">
                     <h3 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
@@ -244,7 +475,9 @@ export default function CreateStock() {
                         name="stock"
                         render={({ field }) => (
                           <FormItem className="space-y-2">
-                            <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Unit Inventory</FormLabel>
+                            <FormLabel className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                              Current Inventory ({selectedUnitName}s)
+                            </FormLabel>
                             <FormControl>
                               <Input
                                 type="number"

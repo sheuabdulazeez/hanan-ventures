@@ -22,11 +22,19 @@
     "core:window:allow-show",
     {
       "identifier": "fs:write-all",
-      "allow": [{ "path": "$APPDATA/*" }]
+      "allow": [
+        {
+          "path": "$APPDATA/*"
+        }
+      ]
     },
     {
       "identifier": "fs:read-all",
-      "allow": [{ "path": "$APPDATA/*" }]
+      "allow": [
+        {
+          "path": "$APPDATA/*"
+        }
+      ]
     }
   ]
 }

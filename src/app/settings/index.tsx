@@ -27,13 +27,15 @@ import {
   Calendar,
   DollarSign,
   ChevronRight,
-  EyeOff
+  EyeOff,
+  Database
 } from "lucide-react"
 import { BaseDirectory, open, remove } from "@tauri-apps/plugin-fs"
 import { getAdminSettings, updateAdminSetting } from "@/database/settings";
 import { useAppStore } from "@/lib/store"
 import { toast } from "@/hooks/use-toast"
 import { motion, AnimatePresence } from "framer-motion"
+import DatabaseSettingsTab from "./DatabaseSettings";
 
 interface BusinessSettings {
   businessName: string
@@ -122,6 +124,17 @@ export default function SettingsPage() {
 
   // Load settings from localStorage on mount
   useEffect(() => {
+    const { user } = useAppStore.getState().auth;
+    if (user?.role !== 'super_admin' as any) {
+      toast({
+        variant: "destructive",
+        title: "Access Denied",
+        description: "Only Super Admins can access system configuration."
+      });
+      window.location.href = "/dashboard";
+      return;
+    }
+
     const loadSettings = async () => {
       try {
         const settings = await getAdminSettings();
@@ -249,6 +262,7 @@ export default function SettingsPage() {
                 {[
                   { id: 'business', label: 'Business', icon: Building2 },
                   { id: 'receipt', label: 'Receipt', icon: Receipt },
+                  { id: 'database', label: 'Database', icon: Database },
                   { id: 'system', label: 'System', icon: Settings, disabled: true },
                   { id: 'payment', label: 'Payment', icon: CreditCard, disabled: true },
                   { id: 'interface', label: 'Interface', icon: Palette, disabled: true },
@@ -433,6 +447,10 @@ export default function SettingsPage() {
                         </div>
                       </CardContent>
                     </Card>
+                  )}
+
+                  {activeTab === 'database' && (
+                    <DatabaseSettingsTab />
                   )}
                 </motion.div>
               </AnimatePresence>

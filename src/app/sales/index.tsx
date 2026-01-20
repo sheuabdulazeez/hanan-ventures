@@ -129,14 +129,14 @@ export default function SalesPage() {
               <h1 className="text-4xl font-black text-slate-900 mb-2">Transaction History</h1>
               <p className="text-slate-500 font-medium tracking-tight">Audit and manage all commercial operations</p>
             </div>
-            <div className="flex gap-2">
+            {/* <div className="flex gap-2">
               {isAdmin && (
                 <Button variant="outline" className="border-slate-200 text-slate-600 font-black uppercase tracking-widest text-[10px] h-12 px-6">
                   <Download className="w-4 h-4 mr-2" />
                   Global Export
                 </Button>
               )}
-            </div>
+            </div> */}
           </div>
         </div>
       </div>
@@ -305,7 +305,10 @@ export default function SalesPage() {
                           {saleItems.map((item) => (
                             <TableRow key={item.id} className="border-slate-50 hover:bg-transparent">
                               <TableCell className="text-xs font-bold text-slate-900">{item.product_name}</TableCell>
-                              <TableCell className="text-xs font-bold text-slate-500">{item.quantity}</TableCell>
+                              <TableCell className="text-xs font-bold text-slate-500">
+                                {item.quantity}
+                                {item.unit_abbrev && <span className="text-[10px] text-slate-400 ml-1 uppercase">({item.unit_abbrev})</span>}
+                              </TableCell>
                               <TableCell className="text-xs font-bold text-slate-500 text-right">₦{item.unit_price.toLocaleString()}</TableCell>
                               <TableCell className="text-xs font-bold text-slate-900 text-right px-4">₦{item.total_price.toLocaleString()}</TableCell>
                             </TableRow>

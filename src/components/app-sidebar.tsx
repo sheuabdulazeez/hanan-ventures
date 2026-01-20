@@ -76,6 +76,11 @@ const data = {
           url: "/dashboard/debtors",
           icon: Wallet,
         },
+        {
+          title: "Purchase Orders",
+          url: "/dashboard/orders",
+          icon: FileText,
+        },
       ],
     },
     {
@@ -86,11 +91,6 @@ const data = {
           title: "Suppliers",
           url: "/dashboard/suppliers",
           icon: Truck,
-        },
-        {
-          title: "Purchase Orders",
-          url: "/dashboard/orders",
-          icon: FileText,
         },
         {
           title: "Expenses",
@@ -112,11 +112,6 @@ const data = {
           url: "/dashboard/teams",
           icon: UsersRound,
         },
-        {
-          title: "Unit Price Demo",
-          url: "/dashboard/unit-price-demo",
-          icon: Scale,
-        },
       ],
     },
   ],
@@ -127,7 +122,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
     auth: { user },
     businessInfo,
   } = useAppStore();
-  const isAdmin = user?.role === "admin" || user?.role === "manager";
+  const isAdmin = user?.role === "admin" || user?.role === "manager" || user?.role === 'super_admin' as any;
+  const isSuperAdmin = user?.role === 'super_admin' as any;
 
   return (
     <Sidebar collapsible="icon" {...props} className="border-r border-sidebar-border bg-sidebar/50 backdrop-blur-xl">
@@ -201,8 +197,18 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
 
       <SidebarContent className="px-2 gap-0">
-        {data.navMain.map((group) => (
-          <NavMain key={group.title} title={group.title} items={group.items as any} />
+        {data.navMain.filter(group => {
+          if (group.title === "Administration") return isAdmin;
+          return true;
+        }).map((group) => (
+          <NavMain
+            key={group.title}
+            title={group.title}
+            items={group.items.filter(item => {
+              if (item.title === "Settings") return isSuperAdmin;
+              return true;
+            }) as any}
+          />
         ))}
       </SidebarContent>
 

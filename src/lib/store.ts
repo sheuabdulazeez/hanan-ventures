@@ -43,6 +43,7 @@ interface AppState {
   addActiveSale: (sale: ActiveSale) => Promise<void>
   removeActiveSale: (saleId: string) => Promise<void>
   updateActiveSale: (saleId: string, updates: Partial<ActiveSale>) => Promise<void>
+  switchActiveSale: (saleId: string) => Promise<void>
 }
 
 const store = new LazyStore('.store.dat')
@@ -164,6 +165,21 @@ export const useAppStore = create<AppState>((set) => ({
       activeSales: state.activeSales.map((sale) =>
         sale.id === saleId ? { ...sale, ...updates } : sale
       ),
+    }))
+    await store.set('activeSales', useAppStore.getState().activeSales)
+  },
+  switchActiveSale: async (saleId) => {
+    set((state) => ({
+      ...state,
+      activeSales: state.activeSales.map((sale) => {
+        if (sale.id === saleId) {
+          return { ...sale, status: 'active' };
+        }
+        if (sale.status === 'active') {
+          return { ...sale, status: 'paused' };
+        }
+        return sale;
+      }),
     }))
     await store.set('activeSales', useAppStore.getState().activeSales)
   },

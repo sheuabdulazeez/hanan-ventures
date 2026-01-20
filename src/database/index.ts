@@ -56,13 +56,21 @@ export class Database {
   }
 
   async select<T = any[]>(query: string, params: any[] = []): Promise<T> {
-    const result = await invoke<QueryResult<T>>('find_many', { query, params });
-    return result.data;
+    const result = await invoke<QueryResult<T>>('find_many', {
+      transactionId: this.transactionId || null,
+      query,
+      params
+    });
+    return result.data as T;
   }
 
   async selectOne<T = any>(query: string, params: any[] = []): Promise<T> {
-    const result = await invoke<QueryResult<T>>('find_one', { query, params });
-    return result.data || null;
+    const result = await invoke<QueryResult<T>>('find_one', {
+      transactionId: this.transactionId || null,
+      query,
+      params
+    });
+    return (result.data || null) as T;
   }
 }
 

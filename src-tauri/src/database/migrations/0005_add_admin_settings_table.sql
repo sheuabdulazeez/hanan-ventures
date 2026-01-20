@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS admin_settings (
 );
 
 -- Insert a default row for settings if it doesn't exist
-INSERT OR IGNORE INTO admin_settings (key, value, description) VALUES ('name', 'Hanan Ventures', 'Name of the business');
+INSERT OR IGNORE INTO admin_settings (key, value, description) VALUES ('name', 'POS System', 'Name of the business');
 INSERT OR IGNORE INTO admin_settings (key, value, description) VALUES ('address', '123 Main St, Cityville', 'Business address');
 INSERT OR IGNORE INTO admin_settings (key, value, description) VALUES ('city', 'Cityville', 'Business city');
 INSERT OR IGNORE INTO admin_settings (key, value, description) VALUES ('state', 'Stateville', 'Business state');

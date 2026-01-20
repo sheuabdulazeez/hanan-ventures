@@ -17,7 +17,7 @@ export async function getSales() {
     FROM sale_payments sp
     WHERE sp.sale_id IN (${sales.map(() => '?').join(',')})
   `, sales.map(sale => sale.id));
-  
+
   // Group payments by sale_id
   const paymentsBySaleId = payments.reduce((acc, payment) => {
     if (!acc[payment.sale_id]) {
@@ -26,12 +26,12 @@ export async function getSales() {
     acc[payment.sale_id].push(payment);
     return acc;
   }, {});
-  
+
   // Attach payments to each sale
   for (const sale of sales) {
     sale.payments = paymentsBySaleId[sale.id] || [];
   }
-  
+
   return sales;
 }
 
@@ -47,7 +47,7 @@ export async function getSaleById(id: string) {
     `,
     [id]
   );
-  
+
   if (sale) {
     // Get payment information
     sale.payments = await db.select(`
@@ -55,7 +55,7 @@ export async function getSaleById(id: string) {
       WHERE sale_id = $1
     `, [id]);
   }
-  
+
   return sale;
 }
 
@@ -63,9 +63,13 @@ export async function getSaleItems(saleId: string) {
   const db = new Database();
   const items = await db.select<TSaleItem[]>(
     `
-        SELECT si.*, p.name as product_name
+        SELECT si.*, 
+               p.name as product_name,
+               cu.name as unit_name,
+               cu.abbrev as unit_abbrev
         FROM sale_items si
         JOIN products p ON si.product_id = p.id
+        LEFT JOIN common_units cu ON si.unit_used = cu.id
         WHERE si.sale_id = $1
     `,
     [saleId]
@@ -82,7 +86,7 @@ export async function createSale(
     const { saleId } = await db.selectOne<{ saleId: string }>(
       `SELECT lower(hex(randomblob(16))) as saleId`
     );
-    
+
 
     // Generate sale ID
     await db.beginTransaction();
@@ -102,10 +106,10 @@ export async function createSale(
     );
 
     // Add sale items and update stock
-    for (const item of items) {
+    for (const item of items as any[]) {
       await db.executeQuery(
-        `INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, total_price, profit, cost_price_at_sale) 
-                 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+        `INSERT INTO sale_items (sale_id, product_id, quantity, unit_price, total_price, profit, cost_price_at_sale, unit_used, base_quantity) 
+                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
         [
           saleId,
           item.product_id,
@@ -114,6 +118,8 @@ export async function createSale(
           item.total_price,
           item.profit,
           item.cost_price_at_sale,
+          item.unit_used || null,
+          item.base_quantity || item.quantity
         ]
       );
 
@@ -121,13 +127,13 @@ export async function createSale(
         `UPDATE products 
                  SET quantity_on_hand = quantity_on_hand - $1 
                  WHERE id = $2`,
-        [item.quantity, item.product_id]
+        [item.base_quantity || item.quantity, item.product_id]
       );
     }
-    
+
     // Add payment records
     const totalPaid = sale.payments.reduce((sum, payment) => sum + payment.amount, 0);
-    
+
     for (const payment of sale.payments) {
       await db.executeQuery(
         `INSERT INTO sale_payments (sale_id, payment_method, amount, bank_name, reference_number) 
@@ -142,7 +148,7 @@ export async function createSale(
       );
     }
 
-    if(totalPaid < sale.total_amount - (sale.discount || 0) && sale.customer_id === "WALK-IN"){
+    if (totalPaid < sale.total_amount - (sale.discount || 0) && sale.customer_id === "WALK-IN") {
       throw new Error("Walk-in customer must pay the full amount");
     }
     // Commit the transaction

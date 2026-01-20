@@ -17,7 +17,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Switch } from "@/components/ui/switch"
-import { create, getUsers, update } from "@/database/user"
+import { create, getUsers, toggleActive, update } from "@/database/user"
 import { TUser, UserRole } from "@/types/database"
 import { useAppStore } from "@/lib/store"
 import { motion, AnimatePresence } from "framer-motion"
@@ -125,6 +125,27 @@ export default function TeamMembersPage() {
       ...member,
       password: "",
     })
+  }
+
+  async function handleToggleActive(member: TeamMember) {
+    setIsSubmitting(true)
+    try {
+      await toggleActive(member.id, !member.isActive)
+      const users = await getUsers()
+      setTeamMembers(users)
+      toast({
+        title: `${member.isActive ? "Access Revoked" : "Access Granted"}`,
+        description: `${member.name}'s access has been ${member.isActive ? "revoked" : "granted"} successfully.`,
+      })
+    } catch (err: any) {
+      toast({
+        title: "Access Revoke Failed",
+        description: "Failed to deactivate member access.",
+        variant: "destructive"
+      })
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const filteredMembers = teamMembers.filter(m =>
@@ -344,8 +365,11 @@ export default function TeamMembersPage() {
                             <div className="flex items-center gap-3">
                               <Switch
                                 disabled={user?.id === member.id}
-                                checked={member.isActive}
-                                onCheckedChange={() => user?.id === member.id ? null : handleToggleActive(member.id)}
+                                defaultChecked={member.isActive}
+                                onCheckedChange={(checked) => user?.id === member.id ? null : handleToggleActive({
+                                  ...member,
+                                  isActive: checked
+                                })}
                                 className="data-[state=checked]:bg-slate-900"
                               />
                               <span className={`text-[9px] font-black uppercase tracking-widest ${member.isActive ? 'text-emerald-500' : 'text-slate-300'}`}>

@@ -1,5 +1,6 @@
 export type PaymentMethod = 'cash' | 'pos' | 'transfer';
 export enum UserRole {
+  super_admin = 'super_admin',
   admin = 'admin',
   manager = 'manager',
   cashier = 'sales',
@@ -57,6 +58,27 @@ export type TSupplier = {
   updated_at: string;
 }
 
+export type TCommonUnit = {
+  id: string;
+  name: string;
+  abbrev: string;
+  related_units: string[]; // Parsed from JSON
+  created_at: string;
+  updated_at: string;
+}
+
+export type TProductUnit = {
+  id: string;
+  product_id: string;
+  unit_id: string;
+  conversion_to_base: number;
+  selling_price: number;
+  is_primary: boolean;
+  created_at: string;
+  updated_at: string;
+  unit?: TCommonUnit; // Optional join
+}
+
 export type TProduct = {
   id: string;
   name: string;
@@ -66,22 +88,24 @@ export type TProduct = {
   selling_price: number;
   quantity_on_hand: number;
   reorder_level: number;
+  base_unit?: string; // ID of common_unit
   created_at: string;
   updated_at: string;
+  product_units?: TProductUnit[]; // Optional join
 }
 
 export type TSale = {
   id: string;
   sale_date: string;
   customer_id: string;
-  customer_name?:string;
+  customer_name?: string;
   employee_id: string;
-  employee_name?:string;
+  employee_name?: string;
   total_amount: number;
   discount: number;
   total_cost?: number;
   gross_profit?: number;
-  payments?: Omit<TSalePayment, "id"|'sale_id'>[];
+  payments?: Omit<TSalePayment, "id" | 'sale_id'>[];
   created_at: string;
   updated_at: string;
 }
@@ -90,12 +114,14 @@ export type TSaleItem = {
   id: string;
   sale_id: string;
   product_id: string;
-  product_name?:string;
+  product_name?: string;
   quantity: number;
   unit_price: number;
   total_price: number;
   cost_price_at_sale?: number;
   profit?: number;
+  unit_name?: string;
+  unit_abbrev?: string;
   created_at: string;
   updated_at: string;
 }
@@ -113,7 +139,7 @@ export type TDebtor = {
   id: string;
   sale_id: string;
   customer_id: string;
-  customer_name?:string;
+  customer_name?: string;
   amount_owed: number;
   due_date: string;
   is_paid: boolean;
@@ -129,7 +155,7 @@ export type TDebtorPayment = {
   bank_name: string;
   amount_paid: number;
   employee_id: string;
-  employee_name?:string;
+  employee_name?: string;
   created_at: string;
   updated_at: string;
 }
@@ -206,7 +232,7 @@ export type TProductPriceHistory = {
   new_selling_price: number | null;
   change_reason: string | null;
   changed_by: string;
-  changed_by_name?:string;
+  changed_by_name?: string;
   created_at: string;
 }
 
@@ -220,9 +246,9 @@ export type TInventoryAdjustment = {
   product_id: string;
   adjustment_type: InventoryAdjustmentType;
   quantity: number;
-  reason: string; 
+  reason: string;
   changed_by: string;
-  changed_by_name?:string;
+  changed_by_name?: string;
   created_at: string;
 }
 
@@ -236,7 +262,7 @@ export type ProductAnalytics = {
     avgSellingPrice: number;
     minSellingPrice: number;
     maxSellingPrice: number;
-    totalProfit: number;  
+    totalProfit: number;
     profitMargin: number;
     avgProfitPerSale: number;
     stockValue: number;

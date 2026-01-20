@@ -37,7 +37,7 @@ function formatDateLocal(date) {
 // Get profit data for a specific date range
 export async function getProfitByDateRange(startDate: string, endDate: string): Promise<ProfitData> {
   const db = await initDatabase();
-  
+
   try {
     // Get sales data with profit information
     const salesResult = await db.selectOne<{
@@ -99,10 +99,10 @@ export async function getWeekProfit(): Promise<ProfitData> {
   const today = new Date();
   const startOfWeek = new Date(today);
   startOfWeek.setDate(today.getDate() - today.getDay());
-  
+
   const startDate = formatDateLocal(startOfWeek);
   const endDate = formatDateLocal(today);
-  
+
   return getProfitByDateRange(startDate, endDate);
 }
 
@@ -110,28 +110,21 @@ export async function getWeekProfit(): Promise<ProfitData> {
 export async function getMonthProfit(): Promise<ProfitData> {
   const today = new Date();
   const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-  
-  
+
+
   const startDate = formatDateLocal(startOfMonth);
   const endDate = formatDateLocal(today);
-  
+
   return getProfitByDateRange(startDate, endDate);
 }
 
 // Get daily profit breakdown for a date range
 export async function getDailyProfitBreakdown(startDate: string, endDate: string): Promise<ProfitByPeriod[]> {
   const db = await initDatabase();
-  
+
   try {
     return await db.select<ProfitByPeriod[]>(`
-      WITH RECURSIVE date_range AS (
-        SELECT DATE($1) as date
-        UNION ALL
-        SELECT DATE(date, '+1 day')
-        FROM date_range
-        WHERE date < DATE($2)
-      ),
-      daily_sales AS (
+      WITH daily_sales AS (
         SELECT 
           DATE(created_at) as date,
           SUM(total_amount) as revenue,
@@ -150,16 +143,16 @@ export async function getDailyProfitBreakdown(startDate: string, endDate: string
         GROUP BY DATE(expense_date)
       )
       SELECT 
-        dr.date,
-        COALESCE(ds.revenue, 0) as revenue,
-        COALESCE(ds.cost, 0) as cost,
-        COALESCE(ds.grossProfit, 0) as grossProfit,
+        ds.date,
+        ds.revenue,
+        ds.cost,
+        ds.grossProfit,
         COALESCE(de.expenses, 0) as expenses,
-        COALESCE(ds.grossProfit, 0) - COALESCE(de.expenses, 0) as netProfit
-      FROM date_range dr
-      LEFT JOIN daily_sales ds ON ds.date = dr.date
-      LEFT JOIN daily_expenses de ON de.date = dr.date
-      ORDER BY dr.date
+        ds.grossProfit - COALESCE(de.expenses, 0) as netProfit
+      FROM daily_sales ds
+      LEFT JOIN daily_expenses de ON de.date = ds.date
+      WHERE ds.revenue > 0
+      ORDER BY ds.date
     `, [startDate, endDate]);
   } catch (error) {
     console.error('Error fetching daily profit breakdown:', error);
@@ -170,7 +163,7 @@ export async function getDailyProfitBreakdown(startDate: string, endDate: string
 // Get product profitability analysis
 export async function getProductProfitability(startDate: string, endDate: string): Promise<ProductProfitability[]> {
   const db = await initDatabase();
-  
+
   try {
     return await db.select<ProductProfitability[]>(`
       SELECT 
@@ -180,7 +173,7 @@ export async function getProductProfitability(startDate: string, endDate: string
         COALESCE(SUM(si.profit), 0) as grossProfit,
         CASE 
           WHEN SUM(si.total_price) > 0 
-          THEN (SUM(si.profit) / SUM(si.total_price)) * 100 
+          THEN (CAST(SUM(si.profit) AS REAL) / SUM(si.total_price)) * 100 
           ELSE 0 
         END as profitMargin,
         COALESCE(SUM(si.quantity), 0) as quantitySold

@@ -12,6 +12,13 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -19,6 +26,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { updateProductQuantity } from "@/database/products";
 import { toast } from "@/hooks/use-toast";
 import { useAppStore } from "@/lib/store";
+import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PrintStockReportButton } from "@/components/PrintStockReportButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -36,9 +44,18 @@ import {
   TrendingDown,
   TrendingUp,
   Tag,
-  Warehouse
+  Warehouse,
+  LayoutGrid,
+  Box,
+  PlusCircle,
+  MinusCircle,
+  CheckCircle2,
+  Settings2,
+  Info
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getCommonUnits, updateProductUnits } from "@/database/products";
+import { TCommonUnit, TProductUnit } from '@/types/database';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -54,7 +71,7 @@ export default function Stocks() {
   const {
     auth: { user },
   } = useAppStore();
-  const isAdmin = user?.role === "admin" || user?.role === "manager";
+  const isAdmin = user?.role === "admin" || user?.role === "manager" || user?.role === "super_admin";
   const [selectedProduct, setSelectedProduct] = useState<TProduct | null>(null);
   const [quantityChange, setQuantityChange] = useState<number>(0);
   const [adjustmentType, setAdjustmentType] = useState<InventoryAdjustmentType>(InventoryAdjustmentType.INCREASE);
@@ -64,6 +81,9 @@ export default function Stocks() {
   const [editForm, setEditForm] = useState({ name: "", category: "", stockAlert: 0 });
   const [adjustmentReason, setAdjustmentReason] = useState<string>("");
   const [products, setProducts] = useState<TProduct[]>([]);
+  const [commonUnits, setCommonUnits] = useState<TCommonUnit[]>([]);
+  const [editProductUnits, setEditProductUnits] = useState<any[]>([]);
+  const [editBaseUnitId, setEditBaseUnitId] = useState<string>("");
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [isLoading, setIsLoading] = useState(true);
@@ -71,7 +91,17 @@ export default function Stocks() {
 
   useEffect(() => {
     loadProducts();
+    loadCommonUnits();
   }, []);
+
+  async function loadCommonUnits() {
+    try {
+      const res = await getCommonUnits();
+      setCommonUnits(res);
+    } catch (error) {
+      console.error(error);
+    }
+  }
 
   async function loadProducts() {
     try {
@@ -93,6 +123,34 @@ export default function Stocks() {
     p.category.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  const updateUnitRow = (index: number, field: keyof TProductUnit, value: any) => {
+    const updated = [...editProductUnits]
+    updated[index] = { ...updated[index], [field]: value }
+    if (field === 'is_primary' && value === true) {
+      updated.forEach((u, i) => { if (i !== index) u.is_primary = false })
+      setNewSellingPrice(updated[index].selling_price)
+    }
+    if (field === 'selling_price' && updated[index].is_primary) {
+      setNewSellingPrice(value)
+    }
+    setEditProductUnits(updated)
+  }
+
+  const addUnitRow = () => {
+    setEditProductUnits([...editProductUnits, {
+      unit_id: "",
+      conversion_to_base: 1,
+      selling_price: 0,
+      is_primary: editProductUnits.length === 0
+    }])
+  }
+
+  const removeUnitRow = (index: number) => {
+    const updated = [...editProductUnits]
+    updated.splice(index, 1)
+    setEditProductUnits(updated)
+  }
+
   const handleUpdate = async () => {
     try {
       if (!selectedProduct) return;
@@ -101,8 +159,19 @@ export default function Stocks() {
         await updateProduct(selectedProduct.id, {
           name: editForm.name,
           category: editForm.category,
-          reorder_level: editForm.stockAlert
+          reorder_level: editForm.stockAlert,
+          base_unit: editBaseUnitId || null
         });
+
+        // Also update units if they were changed (basic sync)
+        if (editProductUnits.length > 0) {
+          await updateProductUnits(selectedProduct.id, editProductUnits.map(u => ({
+            unit_id: u.unit_id,
+            conversion_to_base: u.conversion_to_base,
+            selling_price: u.selling_price,
+            is_primary: u.is_primary
+          })));
+        }
       } else if (activeTab === "quantity") {
         if (quantityChange) {
           await updateProductQuantity(
@@ -186,75 +255,77 @@ export default function Stocks() {
 
       <div className="container mx-auto px-6 py-8">
         {/* Analytics Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
-          <Card className="bg-white border-slate-200 shadow-sm overflow-hidden group">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-900 transition-transform group-hover:scale-110">
-                  <Warehouse className="w-5 h-5" />
+        {isAdmin && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 mb-8">
+            <Card className="bg-white border-slate-200 shadow-sm overflow-hidden group">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-900 transition-transform group-hover:scale-110">
+                    <Warehouse className="w-5 h-5" />
+                  </div>
+                  {lowStockItems > 0 && (
+                    <Badge className="bg-red-50 text-red-600 border-none text-[8px] font-black uppercase">{lowStockItems} Alert</Badge>
+                  )}
                 </div>
-                {lowStockItems > 0 && (
-                  <Badge className="bg-red-50 text-red-600 border-none text-[8px] font-black uppercase">{lowStockItems} Alert</Badge>
-                )}
-              </div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Products</p>
-              <p className="text-2xl font-black text-slate-900 mt-1">{products.length}</p>
-              <p className="text-[10px] font-bold text-slate-500 mt-1">{totalQuantity.toLocaleString()} Units</p>
-            </CardContent>
-          </Card>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Products</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">{products.length}</p>
+                <p className="text-[10px] font-bold text-slate-500 mt-1">{totalQuantity.toLocaleString()} Units</p>
+              </CardContent>
+            </Card>
 
-          <Card className="bg-white border-slate-200 shadow-sm overflow-hidden group">
-            <CardContent className="p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-900 transition-transform group-hover:scale-110">
-                  <TrendingDown className="w-5 h-5" />
+            <Card className="bg-white border-slate-200 shadow-sm overflow-hidden group">
+              <CardContent className="p-6">
+                <div className="flex items-center mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-900 transition-transform group-hover:scale-110">
+                    <TrendingDown className="w-5 h-5" />
+                  </div>
                 </div>
-              </div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cost Value</p>
-              <p className="text-2xl font-black text-slate-900 mt-1">₦{totalCost.toLocaleString()}</p>
-              <p className="text-[10px] font-bold text-slate-500 mt-1">Investment</p>
-            </CardContent>
-          </Card>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cost Value</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">₦{totalCost.toLocaleString()}</p>
+                <p className="text-[10px] font-bold text-slate-500 mt-1">Investment</p>
+              </CardContent>
+            </Card>
 
-          <Card className="bg-white border-slate-200 shadow-sm overflow-hidden group">
-            <CardContent className="p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-900 transition-transform group-hover:scale-110">
-                  <TrendingUp className="w-5 h-5" />
+            <Card className="bg-white border-slate-200 shadow-sm overflow-hidden group">
+              <CardContent className="p-6">
+                <div className="flex items-center mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center text-slate-900 transition-transform group-hover:scale-110">
+                    <TrendingUp className="w-5 h-5" />
+                  </div>
                 </div>
-              </div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Exit Value</p>
-              <p className="text-2xl font-black text-slate-900 mt-1">₦{totalSellingValue.toLocaleString()}</p>
-              <p className="text-[10px] font-bold text-slate-500 mt-1">Potential Rev.</p>
-            </CardContent>
-          </Card>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Exit Value</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">₦{totalSellingValue.toLocaleString()}</p>
+                <p className="text-[10px] font-bold text-slate-500 mt-1">Potential Rev.</p>
+              </CardContent>
+            </Card>
 
-          <Card className="bg-white border-slate-200 shadow-sm overflow-hidden group">
-            <CardContent className="p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white transition-transform group-hover:scale-110">
-                  <ChartLine className="w-5 h-5" />
+            <Card className="bg-white border-slate-200 shadow-sm overflow-hidden group">
+              <CardContent className="p-6">
+                <div className="flex items-center mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white transition-transform group-hover:scale-110">
+                    <ChartLine className="w-5 h-5" />
+                  </div>
                 </div>
-              </div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Poten. Profit</p>
-              <p className="text-2xl font-black text-slate-900 mt-1">₦{potentialProfit.toLocaleString()}</p>
-              <p className="text-[10px] font-bold text-slate-500 mt-1">{totalCost > 0 ? ((potentialProfit / totalCost) * 100).toFixed(1) : 0}% Margin</p>
-            </CardContent>
-          </Card>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Poten. Profit</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">₦{potentialProfit.toLocaleString()}</p>
+                <p className="text-[10px] font-bold text-slate-500 mt-1">{totalCost > 0 ? ((potentialProfit / totalCost) * 100).toFixed(1) : 0}% Margin</p>
+              </CardContent>
+            </Card>
 
-          <Card className="bg-white border-slate-200 shadow-sm overflow-hidden group">
-            <CardContent className="p-6">
-              <div className="flex items-center mb-4">
-                <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 transition-transform group-hover:scale-110">
-                  <AlertTriangle className="w-5 h-5" />
+            <Card className="bg-white border-slate-200 shadow-sm overflow-hidden group">
+              <CardContent className="p-6">
+                <div className="flex items-center mb-4">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center text-amber-600 transition-transform group-hover:scale-110">
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
                 </div>
-              </div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Low Stock</p>
-              <p className="text-2xl font-black text-slate-900 mt-1">{lowStockItems}</p>
-              <p className="text-[10px] font-bold text-slate-500 mt-1">Attention Required</p>
-            </CardContent>
-          </Card>
-        </div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Low Stock</p>
+                <p className="text-2xl font-black text-slate-900 mt-1">{lowStockItems}</p>
+                <p className="text-[10px] font-bold text-slate-500 mt-1">Attention Required</p>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         <Card className="bg-white border-slate-200 shadow-sm overflow-hidden">
           <CardHeader className="bg-slate-50/50 border-b border-slate-100 p-6">
@@ -315,6 +386,11 @@ export default function Stocks() {
                                 <p className="font-black text-slate-900 text-sm leading-tight">{p.name}</p>
                                 <div className="flex items-center gap-2 mt-1">
                                   <Badge variant="outline" className="text-[8px] font-black uppercase tracking-tighter h-4 px-1 border-slate-200 text-slate-400">{p.category}</Badge>
+                                  {p.product_units && p.product_units.length > 0 && (
+                                    <Badge variant="secondary" className="bg-blue-50 text-blue-600 border-blue-100 text-[8px] font-black uppercase tracking-tighter h-4 px-1">
+                                      <LayoutGrid className="w-2 h-2 mr-0.5" /> Matrix
+                                    </Badge>
+                                  )}
                                   {isLowStock && <span className="flex items-center text-[8px] font-black uppercase text-amber-600 gap-0.5"><AlertTriangle className="w-2.5 h-2.5" /> REORDER</span>}
                                 </div>
                               </div>
@@ -368,6 +444,8 @@ export default function Stocks() {
                                         });
                                         setNewSellingPrice(p.selling_price);
                                         setNewCostPrice(p.cost_price);
+                                        setEditBaseUnitId(p.base_unit || "");
+                                        setEditProductUnits(p.product_units ? p.product_units.map(u => ({ ...u })) : []);
                                       }}
                                       className="h-8 px-3 text-slate-400 hover:text-slate-900 hover:bg-slate-100"
                                     >
@@ -389,10 +467,11 @@ export default function Stocks() {
 
                                     <div className="px-6 py-4">
                                       <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)} className="w-full">
-                                        <TabsList className="bg-slate-100/50 w-full p-1 h-12 grid grid-cols-3">
+                                        <TabsList className="bg-slate-100/50 w-full p-1 h-12 grid grid-cols-4">
                                           <TabsTrigger value="details" className="text-[10px] font-black uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:shadow-sm">General</TabsTrigger>
                                           <TabsTrigger value="quantity" className="text-[10px] font-black uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:shadow-sm">Stock</TabsTrigger>
                                           <TabsTrigger value="price" className="text-[10px] font-black uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:shadow-sm">Pricing</TabsTrigger>
+                                          <TabsTrigger value="units" className="text-[10px] font-black uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:shadow-sm">Units</TabsTrigger>
                                         </TabsList>
 
                                         <TabsContent value="details" className="mt-6 space-y-4">
@@ -440,17 +519,107 @@ export default function Stocks() {
                                         <TabsContent value="price" className="mt-6 space-y-4">
                                           <div className="grid grid-cols-2 gap-4 text-left">
                                             <div className="space-y-2">
-                                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">New Cost Price</Label>
+                                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                                New Cost Price
+                                                <span className="text-[9px] text-slate-300 ml-1 lowercase">(per {commonUnits.find(u => u.id === selectedProduct?.base_unit)?.name || 'unit'})</span>
+                                              </Label>
                                               <Input type="number" step="0.01" value={newCostPrice ?? ""} onChange={(e) => setNewCostPrice(parseFloat(e.target.value) || null)} className="h-11 bg-slate-50 border-slate-200 font-black text-slate-900" />
                                             </div>
                                             <div className="space-y-2">
-                                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">New Selling Price</Label>
+                                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                                New Selling Price
+                                                <span className="text-[9px] text-emerald-500/80 ml-1 lowercase">
+                                                  (per {selectedProduct?.product_units?.find(u => u.is_primary)?.unit?.name || commonUnits.find(u => u.id === selectedProduct?.base_unit)?.name || 'unit'})
+                                                </span>
+                                              </Label>
                                               <Input type="number" step="0.01" value={newSellingPrice ?? ""} onChange={(e) => setNewSellingPrice(parseFloat(e.target.value) || null)} className="h-11 bg-slate-50 border-slate-200 font-black text-slate-900" />
                                             </div>
                                           </div>
+                                          {selectedProduct?.product_units && selectedProduct.product_units.length > 0 && (
+                                            <div className="bg-blue-50/50 border border-blue-100 p-3 rounded-lg flex gap-2 items-start">
+                                              <Info className="w-4 h-4 text-blue-400 mt-0.5" />
+                                              <p className="text-[10px] text-blue-600 font-medium leading-relaxed">
+                                                This will update the price for the <b>primary unit</b>. To adjust prices for other units (e.g. {selectedProduct.product_units.filter(u => !u.is_primary).map(u => u.unit?.abbrev).join(', ')}), use the <b>Units</b> tab.
+                                              </p>
+                                            </div>
+                                          )}
                                           <div className="space-y-2 text-left">
                                             <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2"><History className="w-3 h-3" /> Reason</Label>
                                             <Textarea value={adjustmentReason} onChange={(e) => setAdjustmentReason(e.target.value)} placeholder="Reason for price update..." className="bg-slate-50 border-slate-200 font-medium" />
+                                          </div>
+                                        </TabsContent>
+
+                                        <TabsContent value="units" className="mt-6 space-y-4">
+                                          <div className="space-y-4 text-left">
+                                            <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Base Inventory Unit</Label>
+                                              <Select value={editBaseUnitId} onValueChange={setEditBaseUnitId}>
+                                                <SelectTrigger className="h-11 bg-white border-slate-200 font-bold">
+                                                  <SelectValue placeholder="Select Base Unit" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                  {commonUnits.map(unit => (
+                                                    <SelectItem key={unit.id} value={unit.id} className="font-bold uppercase tracking-widest text-[10px]">{unit.name} ({unit.abbrev})</SelectItem>
+                                                  ))}
+                                                </SelectContent>
+                                              </Select>
+                                              <p className="text-[9px] font-bold text-slate-400 uppercase mt-2">The smallest measurable unit for this product</p>
+                                            </div>
+
+                                            <div className="space-y-3">
+                                              <div className="flex items-center justify-between px-1">
+                                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Marketable Units</Label>
+                                                <Button type="button" variant="outline" size="sm" onClick={addUnitRow} className="h-7 text-[9px] font-black uppercase rounded-lg border-slate-200">
+                                                  <PlusCircle className="w-3 h-3 mr-1" /> Add Unit
+                                                </Button>
+                                              </div>
+
+                                              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                                {editProductUnits.filter(u => !u.is_primary).map((u, idx) => (
+                                                  <div key={idx} className="p-3 bg-white border border-slate-100 rounded-xl space-y-3 shadow-sm">
+                                                    <div className="grid grid-cols-2 gap-3">
+                                                      <div className="space-y-1">
+                                                        <Label className="text-[9px] font-black uppercase text-slate-400">Unit Type</Label>
+                                                        <Select value={u.unit_id} onValueChange={(val) => updateUnitRow(editProductUnits.indexOf(u), 'unit_id', val)}>
+                                                          <SelectTrigger className="h-9 bg-slate-50 border-none font-bold text-xs uppercase">
+                                                            <SelectValue placeholder="Unit" />
+                                                          </SelectTrigger>
+                                                          <SelectContent>
+                                                            {commonUnits.map(unit => (
+                                                              <SelectItem key={unit.id} value={unit.id} className="font-bold uppercase text-[10px]">{unit.abbrev}</SelectItem>
+                                                            ))}
+                                                          </SelectContent>
+                                                        </Select>
+                                                      </div>
+                                                      <div className="space-y-1">
+                                                        <Label className="text-[9px] font-black uppercase text-slate-400">Conv. Rate</Label>
+                                                        <Input type="number" value={u.conversion_to_base} onChange={(e) => updateUnitRow(editProductUnits.indexOf(u), 'conversion_to_base', parseFloat(e.target.value))} className="h-9 bg-slate-50 border-none font-bold text-xs" />
+                                                      </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                      <div className="flex-1 space-y-1">
+                                                        <Label className="text-[9px] font-black uppercase text-slate-400">Price (₦)</Label>
+                                                        <Input type="number" value={u.selling_price} onChange={(e) => updateUnitRow(editProductUnits.indexOf(u), 'selling_price', parseFloat(e.target.value))} className="h-9 bg-slate-50 border-none font-bold text-xs text-emerald-600" />
+                                                      </div>
+                                                      <div className="flex items-end h-full pt-4">
+                                                        <Button
+                                                          type="button"
+                                                          variant={u.is_primary ? "default" : "outline"}
+                                                          size="sm"
+                                                          onClick={() => updateUnitRow(editProductUnits.indexOf(u), 'is_primary', true)}
+                                                          className={cn("h-9 border-slate-100 text-[9px] font-black uppercase rounded-lg px-2", u.is_primary && "bg-slate-900 border-slate-900")}
+                                                        >
+                                                          {u.is_primary ? <CheckCircle2 className="w-3 h-3 mr-1" /> : "Primary"}
+                                                        </Button>
+                                                        <Button type="button" variant="ghost" size="sm" onClick={() => removeUnitRow(idx)} className="h-9 text-rose-500 hover:text-rose-600 hover:bg-rose-50 ml-1 rounded-lg">
+                                                          <Trash2 className="w-3.5 h-3.5" />
+                                                        </Button>
+                                                      </div>
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
+                                            </div>
                                           </div>
                                         </TabsContent>
                                       </Tabs>
@@ -474,13 +643,13 @@ export default function Stocks() {
                                     </DialogFooter>
                                   </DialogContent>
                                 </Dialog>
-                                <Button
+                                {/* <Button
                                   variant="ghost"
                                   size="sm"
                                   className="h-8 px-3 text-slate-400 hover:text-red-600 hover:bg-red-50"
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
-                                </Button>
+                                </Button> */}
                               </div>
                             </TableCell>
                           )}
@@ -513,8 +682,8 @@ export default function Stocks() {
                 size="sm"
                 onClick={() => setCurrentPage(i + 1)}
                 className={`w-9 h-9 p-0 text-[10px] font-black ${currentPage === i + 1
-                    ? "bg-slate-900 text-white"
-                    : "bg-white text-slate-400 border-slate-200 hover:text-slate-900"
+                  ? "bg-slate-900 text-white"
+                  : "bg-white text-slate-400 border-slate-200 hover:text-slate-900"
                   }`}
               >
                 {i + 1}

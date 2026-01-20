@@ -373,8 +373,8 @@ export const invoiceHtml = (
             
             <div class="business-info">
                 ${businessInfo.address ? `${businessInfo.address}` : ''}
-                ${businessInfo.city || businessInfo.state || businessInfo.zipCode ? 
-                    `${[businessInfo.city, businessInfo.state, businessInfo.zipCode].filter(Boolean).join(', ')}<br/>` : ''}
+                ${businessInfo.city || businessInfo.state || businessInfo.zipCode ?
+      `${[businessInfo.city, businessInfo.state, businessInfo.zipCode].filter(Boolean).join(', ')}<br/>` : ''}
                 ${businessInfo.phone ? `Tel: ${businessInfo.phone}<br/>` : ''}
                 ${businessInfo.email ? `${businessInfo.email}<br/>` : ''}
                 ${businessInfo.website ? `${businessInfo.website}` : ''}
@@ -428,11 +428,10 @@ export const invoiceHtml = (
             <tbody>
                 ${items.map(item => `
                     <tr>
-                        <td class="qty-col font-bold">${
-                            item.quantity % 1 === 0 ? 
-                                Math.floor(item.quantity) : 
-                                item.quantity
-                        }</td>
+                        <td class="qty-col font-bold">${item.quantity % 1 === 0 ?
+          Math.floor(item.quantity) :
+          item.quantity
+        }${(item as any).unit_abbrev ? ` <span style="text-transform: capitalize;">${(item as any).unit_abbrev}</span>` : ''}</td>
                         <td class="item-col item-name">${item.product_name}</td>
                         <td class="price-col price-text">${item.unit_price.toLocaleString()}</td>
                         <td class="total-col price-text font-bold">${item.total_price.toLocaleString()}</td>
@@ -545,7 +544,7 @@ export const formatReceiptTime = (date: Date, format: string) => {
   switch (format.toLowerCase()) {
     case '12h':
     case '12-hour':
-      return date.toLocaleTimeString('en-US', { 
+      return date.toLocaleTimeString('en-US', {
         hour12: true,
         hour: '2-digit',
         minute: '2-digit'
@@ -596,11 +595,11 @@ export const enhancedInvoiceHtml = (
 ) => {
   const { businessInfo, receiptSettings, systemSettings } = settings;
   const saleDate = new Date(sale.created_at);
-  
+
   // Use the enhanced formatting functions
   const formattedDate = formatReceiptDate(saleDate, systemSettings.dateFormat);
   const formattedTime = formatReceiptTime(saleDate, systemSettings.timeFormat);
-  
+
   // Replace the date/time formatting in the original template
   return invoiceHtml(sale, items, settings, customerDebt)
     .replace(
@@ -650,7 +649,7 @@ export const customerDebtStatementHtml = (
   const totalOutstanding = debtHistory
     .filter(debt => !debt.is_paid)
     .reduce((sum, debt) => sum + debt.amount_owed, 0);
-  
+
   const totalPaid = debtHistory
     .flatMap(debt => debt.payments || [])
     .reduce((sum, payment) => sum + payment.amount_paid, 0);
@@ -1001,8 +1000,8 @@ export const customerDebtStatementHtml = (
             </thead>
             <tbody>
                 ${debtHistory.map(debt => {
-                    const isOverdue = !debt.is_paid && new Date(debt.due_date) < new Date();
-                    return `
+    const isOverdue = !debt.is_paid && new Date(debt.due_date) < new Date();
+    return `
                         <tr>
                             <td class="text-xs">${format(new Date(debt.created_at), 'MMM dd, yyyy')}</td>
                             <td class="text-xs text-right price-text">${systemSettings.currencySymbol}${formatAmount(debt.amount_owed)}</td>
@@ -1020,7 +1019,7 @@ export const customerDebtStatementHtml = (
                             </tr>
                         `).join('') : ''}
                     `;
-                }).join('')}
+  }).join('')}
             </tbody>
         </table>
         
@@ -1082,11 +1081,11 @@ export const stockInventoryHtml = (
   const currentDate = new Date();
   const formattedDate = formatReceiptDate(currentDate, settings.systemSettings.dateFormat);
   const formattedTime = formatReceiptTime(currentDate, settings.systemSettings.timeFormat);
-  
+
   const totalProducts = products.length;
   const totalValue = products.reduce((sum, product) => sum + (product.selling_price * product.quantity_on_hand), 0);
   const lowStockItems = products.filter(product => product.quantity_on_hand <= product.reorder_level);
-  
+
   const html = `
     <!DOCTYPE html>
     <html lang="en">
@@ -1326,10 +1325,10 @@ export const stockInventoryHtml = (
           </thead>
           <tbody>
             ${products.map(product => {
-              const stockValue = product.selling_price * product.quantity_on_hand;
-              const isLowStock = product.quantity_on_hand <= product.reorder_level;
-              
-              return `
+    const stockValue = product.selling_price * product.quantity_on_hand;
+    const isLowStock = product.quantity_on_hand <= product.reorder_level;
+
+    return `
                 <tr ${isLowStock ? 'class="low-stock"' : ''}>
                   <td class="text-xs">
                     ${product.name}<br>
@@ -1340,7 +1339,7 @@ export const stockInventoryHtml = (
                   <td class="text-xs text-right price-text">${formatCurrency(stockValue, settings.systemSettings)}</td>
                 </tr>
               `;
-            }).join('')}
+  }).join('')}
           </tbody>
         </table>
         
@@ -1359,14 +1358,14 @@ export const stockInventoryHtml = (
             </thead>
             <tbody>
               ${lowStockItems.map(product => {
-                return `
+    return `
                   <tr class="low-stock">
                     <td class="text-xs">${product.name}</td>
                     <td class="text-xs text-center">${product.quantity_on_hand}</td>
                     <td class="text-xs text-center">${product.reorder_level}</td>
                   </tr>
                 `;
-              }).join('')}
+  }).join('')}
             </tbody>
           </table>
         ` : ''}
@@ -1391,7 +1390,7 @@ export const stockInventoryHtml = (
     </body>
     </html>
   `;
-  
+
   return html;
 };
 
@@ -1445,7 +1444,7 @@ export const profitReportHtml = (
   },
 ) => {
   const { businessInfo, receiptSettings, systemSettings } = settings;
-  
+
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-NG', {
       style: 'currency',
@@ -1778,7 +1777,7 @@ export const profitReportHtml = (
 </body>
 </html>
   `;
-  
+
   return html;
 };
 
@@ -1817,12 +1816,12 @@ export const debtorsListHtml = (
   const currentDate = new Date();
   const formattedDate = formatReceiptDate(currentDate, settings.systemSettings.dateFormat);
   const formattedTime = formatReceiptTime(currentDate, settings.systemSettings.timeFormat);
-  
+
   const totalDebt = debtors.reduce((sum, debtor) => sum + debtor.amount_owed, 0);
   const paidDebtors = debtors.filter(debtor => debtor.is_paid);
   const unpaidDebtors = debtors.filter(debtor => !debtor.is_paid);
   const overdueDebtors = unpaidDebtors.filter(debtor => new Date(debtor.due_date) < new Date());
-  
+
   const html = `
     <!DOCTYPE html>
     <html lang="en">
@@ -2033,10 +2032,10 @@ export const debtorsListHtml = (
         
         <div class="debtors-list">
           ${debtors.map(debtor => {
-            const isOverdue = !debtor.is_paid && new Date(debtor.due_date) < new Date();
-            const dueDate = formatReceiptDate(new Date(debtor.due_date), settings.systemSettings.dateFormat);
-            
-            return `
+    const isOverdue = !debtor.is_paid && new Date(debtor.due_date) < new Date();
+    const dueDate = formatReceiptDate(new Date(debtor.due_date), settings.systemSettings.dateFormat);
+
+    return `
               <div class="debtor-item ${debtor.is_paid ? 'paid' : ''}">
                 <div class="debtor-name">${debtor.customer_name}</div>
                 <div class="debtor-details">
@@ -2055,7 +2054,7 @@ export const debtorsListHtml = (
                 </div>
               </div>
             `;
-          }).join('')}
+  }).join('')}
         </div>
         
         <div class="footer">
@@ -2066,6 +2065,6 @@ export const debtorsListHtml = (
     </body>
     </html>
   `;
-  
+
   return html;
 };

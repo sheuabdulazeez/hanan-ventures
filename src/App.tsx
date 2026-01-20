@@ -22,7 +22,6 @@ import AddExpensePage from "./app/expenses/Create";
 import SettingsPage from "./app/settings";
 import TeamMembersPage from "./app/teams";
 import ProductAnalysis from "./app/product-analysis/ProductAnalysis";
-import UnitPriceDemo from "./app/unit-price-demo";
 
 function App() {
     useEffect(() => {
@@ -74,9 +73,6 @@ function App() {
                         </Route>
                         <Route path='settings'>
                             <Route path='' element={<SettingsPage />} />
-                        </Route>
-                        <Route path='unit-price-demo'>
-                            <Route path='' element={<UnitPriceDemo />} />
                         </Route>
                     </Route>
                 </Route>
