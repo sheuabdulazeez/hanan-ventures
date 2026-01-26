@@ -58,48 +58,6 @@ import { createSale } from "@/database/sales";
 import { useAppStore } from "@/lib/store";
 import { randomString, cn } from "@/lib/utils";
 
-// --- Helper Components ---
-const NumberInput = ({ 
-  value, 
-  onChange, 
-  className, 
-  ...props 
-}: React.InputHTMLAttributes<HTMLInputElement> & { 
-  value: number, 
-  onChange: (val: number) => void 
-}) => {
-  const [localValue, setLocalValue] = useState(value.toString());
-
-  useEffect(() => {
-    // Only sync from parent if the numeric value is different from our local parsed value
-    // This allows "1." to exist locally while parent has 1
-    if (parseFloat(localValue) !== value) {
-      setLocalValue(value.toString());
-    }
-  }, [value]);
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = e.target.value;
-    setLocalValue(val);
-    const num = parseFloat(val);
-    if (!isNaN(num)) {
-      onChange(num);
-    } else if (val === "") {
-      onChange(0);
-    }
-  };
-
-  return (
-    <input 
-      type="number" 
-      value={localValue} 
-      onChange={handleChange} 
-      className={className} 
-      {...props} 
-    />
-  );
-};
-
 // --- POS Integration Types ---
 type CommonUnit = {
   id: string;
@@ -139,7 +97,7 @@ const CATEGORIES = [
 ];
 
 export default function CreateSales() {
-  const { auth, activeSales, addActiveSale, updateActiveSale, removeActiveSale, switchActiveSale } = useAppStore();
+  const { auth, activeSales, addActiveSale, updateActiveSale, removeActiveSale } = useAppStore();
   const [customers, setCustomers] = useState<TCustomer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [currentSaleId, setCurrentSaleId] = useState<string | null>(() => activeSales.find(s => s.status === "active")?.id);
@@ -494,7 +452,7 @@ export default function CreateSales() {
       return;
     }
     await updateCurrentSale({ status: "paused" });
-    await createNewSale();
+    createNewSale();
     toast({ title: "Sale Paused", description: "Order has been moved to paused list" });
   };
 
@@ -719,17 +677,9 @@ export default function CreateSales() {
                     <div className="flex justify-between mb-2">
                       <div className="flex-1 pr-2">
                         <p className="text-xs font-bold text-slate-800 line-clamp-1">{item.product.name}</p>
-                        <div className="flex items-center gap-1 mt-1">
-                          <span className="text-xs font-bold text-slate-400">₦</span>
-                          <NumberInput
-                            className="w-20 text-xs font-bold text-slate-700 bg-transparent border-b border-dashed border-slate-300 focus:border-blue-500 outline-none p-0 [&::-webkit-inner-spin-button]:appearance-none"
-                            value={item.unit_price}
-                            onChange={(val) => handleUpdatePrice(index, val)}
-                            onClick={(e) => e.stopPropagation()}
-                            step="any"
-                          />
-                          <span className="text-[10px] text-gray-400">/ {(item as any).unit_info?.abbrev || 'pc'}</span>
-                        </div>
+                        <p className="text-[10px] text-gray-500 mt-0.5">
+                          {formatCurrency(item.unit_price)} / {(item as any).unit_info?.abbrev || 'pc'}
+                        </p>
                       </div>
                       <span className="text-xs font-black text-slate-900">{formatCurrency(item.total_price)}</span>
                     </div>
@@ -738,12 +688,7 @@ export default function CreateSales() {
                         <button className="px-2 h-full text-slate-400 hover:text-slate-600" onClick={() => updateQuantity(index, Math.max(0, item.quantity - 1))}>
                           <Minus className="w-3 h-3" />
                         </button>
-                        <NumberInput
-                          className="w-10 text-center text-xs font-bold text-slate-700 border-none focus:ring-0 p-0 h-full bg-transparent outline-none appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                          value={item.quantity}
-                          onChange={(val) => updateQuantity(index, val)}
-                          step="any"
-                        />
+                        <span className="w-8 text-center text-xs font-bold text-slate-700">{item.quantity}</span>
                         <button className="px-2 h-full text-slate-400 hover:text-slate-600" onClick={() => updateQuantity(index, item.quantity + 1)}>
                           <Plus className="w-3 h-3" />
                         </button>

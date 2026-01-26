@@ -1,69 +1,84 @@
 import { Button } from "@/components/ui/button";
 import { TSale, TSaleItem } from "@/types/database";
-import { Printer } from "lucide-react";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { format } from "date-fns";
-import { useRef } from "react";
-import { enhancedInvoiceHtml } from "@/lib/utils";
+import { Printer, Loader2 } from "lucide-react";
+import { useState } from "react";
 import { useAppStore } from "@/lib/store";
 import { getCustomerDebtSummary } from "@/database/debtors";
+import { invoke } from "@tauri-apps/api/core";
+import { pdf } from "@react-pdf/renderer";
+import ReceiptPDF from "./pdf/ReceiptPDF";
+import { toast } from "@/hooks/use-toast";
 
 interface InvoiceModalProps {
   sale: TSale;
   items: TSaleItem[];
 }
 
-
-
 export default function PrintInvoiceButton(props: InvoiceModalProps) {
   const { sale, items } = props;
-  const printWindow = useRef<WebviewWindow | null>(null);
   const { businessInfo, receiptSettings, systemSettings } = useAppStore();
+  const [isPrinting, setIsPrinting] = useState(false);
 
-  const onClick = async () => {
-    let customerDebt = null;
+  const handlePrint = async () => {
+    if (!receiptSettings.printerName) {
+      toast({ title: "No printer selected", variant: "destructive" });
+      return;
+    }
+
+    setIsPrinting(true);
+    let customerDebt = undefined;
 
     // Fetch customer debt information if it's not a walk-in customer
-    // if (sale.customer_id && sale.customer_id !== 'WALK-IN') {
-    //   try {
-    //     customerDebt = await getCustomerDebtSummary(sale.customer_id, sale.total_amount - sale.payments.reduce((acc, cur) => acc + cur.amount, 0));
-    //   } catch (error) {
-    //     console.error('Failed to load customer debt:', error);
-    //   }
-    // }
+    if (sale.customer_id && sale.customer_id !== 'WALK-IN') {
+      try {
+        const outstanding = sale.total_amount - sale.payments.reduce((acc, cur) => acc + cur.amount, 0);
+        customerDebt = await getCustomerDebtSummary(sale.customer_id, outstanding);
+      } catch (error) {
+        console.error('Failed to load customer debt:', error);
+      }
+    }
 
-    const htmlContent = enhancedInvoiceHtml(sale, items, {
-      businessInfo,
-      receiptSettings,
-      systemSettings,
-    }, customerDebt || undefined);
+    try {
+      const doc = (
+        <ReceiptPDF
+          sale={sale}
+          items={items}
+          settings={{
+            businessInfo,
+            receiptSettings,
+            systemSettings,
+          }}
+          customerDebt={customerDebt || undefined}
+        />
+      );
 
-    printWindow.current = new WebviewWindow("print", {
-      url: "/print.html",
-      width: 800,
-      height: 600,
-      title: `Invoice #${sale.id}`,
-    });
+      const blob = await pdf(doc).toBlob();
+      const buffer = await blob.arrayBuffer();
+      const bytes = Array.from(new Uint8Array(buffer));
 
-    printWindow.current.listen("close", () => {
-      printWindow.current.close();
-      printWindow.current = null;
-    })
-
-    printWindow.current.listen("loaded", async () => {
-      await printWindow.current.emit("print-content", {
-        html: htmlContent,
+      await invoke('print_pdf', {
+        printerPort: receiptSettings.printerName,
+        pdfBytes: bytes,
+        paperWidth: receiptSettings.paperSize === '58mm' ? 58 : 80
       });
-    })
+
+      toast({ title: "Receipt sent to printer" });
+    } catch (error) {
+      console.error(error);
+      toast({ title: "Print failed", description: String(error), variant: "destructive" });
+    } finally {
+      setIsPrinting(false);
+    }
   }
 
   return (
     <Button
-      className="flex items-center justify-center"
-      onClick={onClick}
+      className="flex items-center justify-center gap-2"
+      onClick={handlePrint}
       title="Print Receipt"
+      disabled={isPrinting}
     >
-      <Printer size={24} />
+      {isPrinting ? <Loader2 className="animate-spin" size={24} /> : <Printer size={24} />}
       Print Receipt
     </Button>
   )

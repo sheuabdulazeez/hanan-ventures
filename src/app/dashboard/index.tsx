@@ -179,7 +179,7 @@ export default function DashboardPage() {
                   <ShoppingCart className="w-6 h-6" />
                 </div>
               </div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Volume Yield</p>
+              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Sales</p>
               <h2 className="text-3xl font-black text-white tracking-tighter">
                 {hasFinancialAccess ? `${metrics?.totalSales && metrics?.averageOrderValue ? Math.round(metrics.totalSales / metrics.averageOrderValue) : 0} Orders` : '•••••'}
               </h2>
@@ -209,7 +209,7 @@ export default function DashboardPage() {
             <Card className="lg:col-span-2 bg-white border-slate-200 shadow-sm overflow-hidden rounded-3xl">
               <CardHeader className="p-8 border-b border-slate-100 flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-900">Commercial Velocity</CardTitle>
+                  <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-900">Growth Charts</CardTitle>
                   <CardDescription className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Daily Transactional Intelligence</CardDescription>
                 </div>
               </CardHeader>
@@ -362,7 +362,7 @@ export default function DashboardPage() {
           <Card className="bg-white border-slate-200 shadow-sm overflow-hidden rounded-3xl">
             <CardHeader className="p-8 border-b border-slate-100 flex flex-row items-center justify-between">
               <div>
-                <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-900">Recent Terminal Logs</CardTitle>
+                <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-900">Recent Sales</CardTitle>
                 <CardDescription className="text-[10px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Latest transaction sequences</CardDescription>
               </div>
               <Link to="/dashboard/sales">
@@ -408,8 +408,8 @@ export default function DashboardPage() {
             {hasFinancialAccess && (
               <Card className="bg-white border-slate-200 shadow-sm overflow-hidden rounded-3xl flex-1">
                 <CardHeader className="p-6 border-b border-slate-100">
-                  <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900">Elite Entities</CardTitle>
-                  <CardDescription className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Highest purchase volume nodes</CardDescription>
+                  <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900">Elite Customers</CardTitle>
+                  <CardDescription className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Highest purchase volume</CardDescription>
                 </CardHeader>
                 <CardContent className="p-0">
                   <div className="divide-y divide-slate-100">
@@ -421,7 +421,7 @@ export default function DashboardPage() {
                           </div>
                           <div>
                             <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{customer.name}</p>
-                            <p className="text-[9px] font-bold text-slate-400 uppercase">{customer.total_orders} Conversions</p>
+                            <p className="text-[9px] font-bold text-slate-400 uppercase">{customer.total_orders} Sales</p>
                           </div>
                         </div>
                         <p className="text-sm font-black text-slate-900 text-nowrap">₦{customer.total_purchases.toLocaleString()}</p>
@@ -436,7 +436,7 @@ export default function DashboardPage() {
             <Card className="bg-white border-slate-200 shadow-sm overflow-hidden rounded-3xl flex-1 border-l-4 border-l-red-500">
               <CardHeader className="p-6 border-b border-slate-100 flex flex-row items-center justify-between">
                 <div>
-                  <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-red-600">Liability Monitor</CardTitle>
+                  <CardTitle className="text-[11px] font-black uppercase tracking-[0.2em] text-red-600">Debt Monitor</CardTitle>
                   <CardDescription className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Critical outstanding balances</CardDescription>
                 </div>
                 <Link to="/dashboard/debtors">
@@ -454,7 +454,7 @@ export default function DashboardPage() {
                       </TableRow>
                     )) : (
                       <TableRow>
-                        <TableCell colSpan={3} className="text-center py-10 text-[10px] font-black text-slate-300 uppercase">System Liquid: No Liabilities</TableCell>
+                        <TableCell colSpan={3} className="text-center py-10 text-[10px] font-black text-slate-300 uppercase">System Liquid: No Debts</TableCell>
                       </TableRow>
                     )}
                   </TableBody>

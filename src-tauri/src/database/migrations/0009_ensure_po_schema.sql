@@ -1,3 +1,4 @@
+PRAGMA defer_foreign_keys = ON;
 -- Recreate purchase_orders table
 CREATE TABLE IF NOT EXISTS purchase_orders_new (
     id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
@@ -13,13 +14,11 @@ CREATE TABLE IF NOT EXISTS purchase_orders_new (
 -- Copy data (Using INSERT OR IGNORE to handle potential column mismatches safely, though explicit column list is safer if known)
 -- Since we know valid columns from 0001 + new columns, we try to copy what exists.
 -- However, SQLite copy requires matching columns. We'll select explicitly where possible or use defaults.
-INSERT INTO purchase_orders_new (id, order_date, supplier_id, employee_id, total_cost, status, created_at, updated_at)
+INSERT INTO purchase_orders_new (id, order_date, supplier_id, status, created_at, updated_at)
 SELECT 
     id, 
     order_date, 
     supplier_id, 
-    employee_id, 
-    COALESCE(total_cost, 0), -- total_cost might be new, use 0 if copying from old schema that somehow had it (or use ALTER fallback logic conceptually)
     status, 
     created_at, 
     updated_at 
@@ -57,3 +56,6 @@ ALTER TABLE purchase_order_items_new RENAME TO purchase_order_items;
 
 -- Ensure Business Name is Set
 UPDATE admin_settings SET value = 'POS System' WHERE key = 'name';
+
+-- Re-enable immediate foreign key checks
+PRAGMA defer_foreign_keys = OFF;

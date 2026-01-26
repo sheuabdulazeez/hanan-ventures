@@ -19,6 +19,8 @@ interface AppState {
     logo: string,
   };
   receiptSettings: {
+    paperSize: '80mm' | '58mm';
+    printerName: string;
     footerText: string,
   };
   systemSettings: {
@@ -62,11 +64,13 @@ export const useAppStore = create<AppState>((set) => ({
     logo: '',
   },
   receiptSettings: {
+    paperSize: "80mm",
+    printerName: "",
     footerText: '',
   },
   systemSettings: {
     currency: '',
-    currencySymbol: '',
+    currencySymbol: 'N',
     dateFormat: '',
     timeFormat: '',
   },
@@ -136,6 +140,8 @@ export const useAppStore = create<AppState>((set) => ({
     });
     useAppStore.getState().setReceiptSettings({
       footerText: settings.receipt_footer,
+      paperSize: (settings.printer_paper_size as '80mm' | '58mm') || '80mm',
+      printerName: settings.printer_name,
     });
     useAppStore.getState().setSystemSettings({
       currency: settings.currency,
@@ -207,6 +213,7 @@ store.init().then(async () => {
     useAppStore.getState().setUser(savedUser as TUser)
   }
   const settings = await getAdminSettings();
+  console.log(settings)
   useAppStore.getState().setBusinessInfo({
     name: settings.name,
     address: settings.address,
@@ -220,6 +227,8 @@ store.init().then(async () => {
   });
   useAppStore.getState().setReceiptSettings({
     footerText: settings.receipt_footer,
+    paperSize: (settings.printer_paper_size as '80mm' | '58mm') || '80mm',
+    printerName: settings.printer_port,
   });
   useAppStore.getState().setSystemSettings({
     currency: settings.currency,

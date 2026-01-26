@@ -1,4 +1,5 @@
 mod database;
+mod printer;
 use database::DatabaseConnection;
 use tauri::Manager;
 
@@ -9,6 +10,7 @@ pub fn run() {
             .plugin(tauri_plugin_fs::init())
             .plugin(tauri_plugin_store::Builder::new().build())
             .setup(|app| {
+
                 let db_name = if cfg!(debug_assertions) {
                     "dev.db"
                 } else {
@@ -32,9 +34,29 @@ pub fn run() {
                 database::rollback_transaction,
                 database::find_one,
                 database::find_many,
+                printer::get_printers,
+                printer::print_pdf,
+                printer::test_print
             ])
             .plugin(tauri_plugin_opener::init())
             .run(tauri::generate_context!())
             .expect("error while running tauri application");
     });
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    
+    #[test]
+    fn test_list_printers() {
+        let printers = printer::get_printers().unwrap();
+        println!("Found {} printers:", printers.len());
+        for printer in printers {
+            println!("  - {} ({})", printer.name, printer.port);
+        }
+    }
+    
+   
 }

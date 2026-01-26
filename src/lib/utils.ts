@@ -44,6 +44,7 @@ export const invoiceHtml = (
     };
     receiptSettings: {
       footerText: string;
+      paperSize?: '80mm' | '58mm';
     };
     systemSettings: {
       currency: string;
@@ -59,6 +60,7 @@ export const invoiceHtml = (
   }
 ) => {
   const { businessInfo, receiptSettings, systemSettings } = settings;
+  const paperSize = receiptSettings.paperSize || '80mm';
   const amountPaid = sale.payments.reduce(
     (acc, payment) => acc + payment.amount,
     0
@@ -121,12 +123,13 @@ export const invoiceHtml = (
 
         body {
             font-family:Tahoma;
-            font-size: 12px;
+            font-size: ${paperSize === '58mm' ? '10px' : '12px'};
             line-height: 1.4;
             margin: 0;
             padding: 2mm;
             color: black;
             background: white;
+            width: ${paperSize};
         }
 
         .print-content {
@@ -635,6 +638,7 @@ export const customerDebtStatementHtml = (
     };
     receiptSettings: {
       footerText: string;
+      paperSize: string;
     };
     systemSettings: {
       currency: string;
@@ -645,6 +649,7 @@ export const customerDebtStatementHtml = (
   },
 ) => {
   const { businessInfo, receiptSettings, systemSettings } = settings;
+  const paperSize = receiptSettings.paperSize || '80mm';
   const currentDate = new Date();
   const totalOutstanding = debtHistory
     .filter(debt => !debt.is_paid)
@@ -665,7 +670,7 @@ export const customerDebtStatementHtml = (
     <style>
         @page {
           font-family:Tahoma;
-          size: 80mm auto;
+          size: ${paperSize} auto;
           margin: 0;
           padding: 0;
         }
@@ -676,13 +681,13 @@ export const customerDebtStatementHtml = (
                 font-style: normal;
                 margin: 0;
                 padding: 0;
-                size: 80mm auto;
+                size: ${paperSize} auto;
             }
             
             body {
-                font-size: 12px;
+                font-size: ${paperSize === '58mm' ? '10px' : '12px'};
                 line-height: 1.4;
-                width: 100%;
+                width: ${paperSize};
                 height: 100%;
                 margin: 0;
                 padding: 0;
@@ -707,12 +712,13 @@ export const customerDebtStatementHtml = (
 
         body {
             font-family:Tahoma;
-            font-size: 12px;
+            font-size: ${paperSize === '58mm' ? '10px' : '12px'};
             line-height: 1.4;
             margin: 0;
             padding: 2mm;
             color: black;
             background: white;
+            width: ${paperSize};
         }
 
         .print-content {
@@ -1069,6 +1075,7 @@ export const stockInventoryHtml = (
     };
     receiptSettings: {
       footerText: string;
+      paperSize: string;
     };
     systemSettings: {
       currency: string;
@@ -1081,6 +1088,7 @@ export const stockInventoryHtml = (
   const currentDate = new Date();
   const formattedDate = formatReceiptDate(currentDate, settings.systemSettings.dateFormat);
   const formattedTime = formatReceiptTime(currentDate, settings.systemSettings.timeFormat);
+  const paperSize = settings.receiptSettings.paperSize || '80mm';;
 
   const totalProducts = products.length;
   const totalValue = products.reduce((sum, product) => sum + (product.selling_price * product.quantity_on_hand), 0);
@@ -1095,23 +1103,23 @@ export const stockInventoryHtml = (
       <title>Stock Inventory Report</title>
       <style>
         @page {
-          size: 80mm auto;
+          size: ${paperSize} auto;
           margin: 0;
         }
         
         @media print {
-          body { margin: 0; }
+          body { margin: 0; width: ${paperSize}; }
           .no-print { display: none; }
         }
         
         body {
           font-family: 'Tahoma', Arial, sans-serif;
-          font-size: 10px;
+          font-size: ${paperSize === '58mm' ? '9px' : '10px'};
           line-height: 1.2;
           color: #000;
           margin: 0;
           padding: 4px;
-          width: 72mm;
+          width: ${paperSize};
           background: white;
         }
         
@@ -1434,6 +1442,7 @@ export const profitReportHtml = (
     };
     receiptSettings: {
       footerText: string;
+      paperSize: string;
     };
     systemSettings: {
       currency: string;
@@ -1444,6 +1453,7 @@ export const profitReportHtml = (
   },
 ) => {
   const { businessInfo, receiptSettings, systemSettings } = settings;
+   const paperSize = receiptSettings.paperSize || '80mm';
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-NG', {
@@ -1466,13 +1476,14 @@ export const profitReportHtml = (
     <title>Profit Report - ${periodLabel}</title>
     <style>
         @page {
-            size: 80mm auto;
+            size: ${paperSize} auto;
             margin: 0;
         }
         
         @media print {
             body { 
                 margin: 0; 
+                width: ${paperSize};
                 -webkit-print-color-adjust: exact;
                 color-adjust: exact;
             }
@@ -1481,18 +1492,18 @@ export const profitReportHtml = (
         
         body {
             font-family: 'Tahoma', 'Arial', sans-serif;
-            font-size: 11px;
+            font-size: ${paperSize === '58mm' ? '10px' : '11px'};
             line-height: 1.3;
             color: #000;
             margin: 0;
             padding: 8px;
-            width: 80mm;
+            width: ${paperSize};
             box-sizing: border-box;
         }
         
         .print-content {
             width: 100%;
-            max-width: 80mm;
+            max-width: ${paperSize};
         }
         
         .text-center { text-align: center; }

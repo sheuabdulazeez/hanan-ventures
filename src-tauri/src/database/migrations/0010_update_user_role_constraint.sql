@@ -1,5 +1,8 @@
+-- Defer foreign key checks (different from disabling)
+PRAGMA defer_foreign_keys = ON;
+
 -- Create new table with updated CHECK constraint
-CREATE TABLE IF NOT EXISTS users_new (
+CREATE TABLE users_new (
   id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))),
   name TEXT NOT NULL,
   username TEXT UNIQUE NOT NULL,
@@ -21,3 +24,6 @@ DROP TABLE users;
 
 -- Rename new table
 ALTER TABLE users_new RENAME TO users;
+
+-- Re-enable immediate foreign key checks
+PRAGMA defer_foreign_keys = OFF;
