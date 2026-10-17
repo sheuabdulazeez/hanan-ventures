@@ -2,6 +2,7 @@ import { getProducts, updateProductPrices, updateProduct } from "@/database/prod
 import { InventoryAdjustmentType, TProduct } from "@/types/database";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
+import { format } from "date-fns";
 import {
   Dialog,
   DialogClose,
@@ -19,6 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -30,6 +32,10 @@ import { cn } from "@/lib/utils";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PrintStockReportButton } from "@/components/PrintStockReportButton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { pdf } from "@react-pdf/renderer";
+import StockReportPDF from "@/components/pdf/StockReportPDF";
+import * as XLSX from "xlsx";
+import { invoke } from "@tauri-apps/api/core";
 import {
   Search,
   Plus,
@@ -77,22 +83,37 @@ export default function Stocks() {
   const [adjustmentType, setAdjustmentType] = useState<InventoryAdjustmentType>(InventoryAdjustmentType.INCREASE);
   const [newSellingPrice, setNewSellingPrice] = useState<number | null>(null);
   const [newCostPrice, setNewCostPrice] = useState<number | null>(null);
-  const [activeTab, setActiveTab] = useState<"quantity" | "price" | "details">("details");
+  const [activeTab, setActiveTab] = useState<"quantity" | "price" | "details" | "units">("details");
   const [editForm, setEditForm] = useState({ name: "", category: "", stockAlert: 0 });
   const [adjustmentReason, setAdjustmentReason] = useState<string>("");
   const [products, setProducts] = useState<TProduct[]>([]);
   const [commonUnits, setCommonUnits] = useState<TCommonUnit[]>([]);
   const [editProductUnits, setEditProductUnits] = useState<any[]>([]);
   const [editBaseUnitId, setEditBaseUnitId] = useState<string>("");
+  const [hasVariations, setHasVariations] = useState(false);
+  const [bulkAdjustEnabled, setBulkAdjustEnabled] = useState(false);
+  const [bulkUnitId, setBulkUnitId] = useState<string>("");
+  const [bulkQuantity, setBulkQuantity] = useState<number>(0);
   const [searchTerm, setSearchTerm] = useState<string>("");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
   const itemPerPage = 10;
 
   useEffect(() => {
     loadProducts();
     loadCommonUnits();
   }, []);
+
+  useEffect(() => {
+    if (!bulkAdjustEnabled) return;
+    const conversion =
+      bulkUnitId && bulkUnitId !== editBaseUnitId
+        ? (editProductUnits.find(u => u.unit_id === bulkUnitId)?.conversion_to_base || 1)
+        : 1;
+    const baseQty = Math.max(0, bulkQuantity) * conversion;
+    setQuantityChange(baseQty);
+  }, [bulkAdjustEnabled, bulkUnitId, bulkQuantity, editProductUnits, editBaseUnitId]);
 
   async function loadCommonUnits() {
     try {
@@ -164,8 +185,10 @@ export default function Stocks() {
         });
 
         // Also update units if they were changed (basic sync)
-        if (editProductUnits.length > 0) {
-          await updateProductUnits(selectedProduct.id, editProductUnits.map(u => ({
+        const unitsToSave = hasVariations ? editProductUnits : editProductUnits.filter(u => u.is_primary);
+        const shouldSyncUnits = editProductUnits.length > 0 || (!hasVariations && (selectedProduct.product_units?.length || 0) > 0);
+        if (shouldSyncUnits) {
+          await updateProductUnits(selectedProduct.id, unitsToSave.map(u => ({
             unit_id: u.unit_id,
             conversion_to_base: u.conversion_to_base,
             selling_price: u.selling_price,
@@ -189,6 +212,21 @@ export default function Stocks() {
         if (Object.keys(priceUpdates).length > 0) {
           await updateProductPrices(selectedProduct.id, priceUpdates, adjustmentReason, user.id);
         }
+      } else if (activeTab === "units") {
+        await updateProduct(selectedProduct.id, {
+          base_unit: editBaseUnitId || null
+        });
+
+        const unitsToSave = hasVariations ? editProductUnits : editProductUnits.filter(u => u.is_primary);
+        const shouldSyncUnits = editProductUnits.length > 0 || (!hasVariations && (selectedProduct.product_units?.length || 0) > 0);
+        if (shouldSyncUnits) {
+          await updateProductUnits(selectedProduct.id, unitsToSave.map(u => ({
+            unit_id: u.unit_id,
+            conversion_to_base: u.conversion_to_base,
+            selling_price: u.selling_price,
+            is_primary: u.is_primary
+          })));
+        }
       }
 
       await loadProducts();
@@ -199,6 +237,10 @@ export default function Stocks() {
       setNewCostPrice(null);
       setEditForm({ name: "", category: "", stockAlert: 0 });
       setActiveTab("details");
+      setHasVariations(false);
+      setBulkAdjustEnabled(false);
+      setBulkUnitId("");
+      setBulkQuantity(0);
 
       toast({
         title: "Success",
@@ -224,6 +266,52 @@ export default function Stocks() {
   const potentialProfit = totalSellingValue - totalCost;
   const lowStockItems = products.filter(p => p.quantity_on_hand <= (p.reorder_level || 0)).length;
 
+  const downloadBlob = async (blob: Blob, filename: string) => {
+    const buffer = await blob.arrayBuffer();
+    const bytes = Array.from(new Uint8Array(buffer));
+    await invoke("save_bytes_to_downloads", { filename, bytes });
+  };
+
+  const exportStockExcel = async () => {
+    try {
+      setIsExporting(true);
+      const rows = filteredProducts.map((p) => ({
+        Product: p.name,
+        Category: p.category || "",
+        Quantity: p.quantity_on_hand,
+        Cost: p.cost_price,
+        Price: p.selling_price,
+        ReorderLevel: p.reorder_level || 0,
+      }));
+      const sheet = XLSX.utils.json_to_sheet(rows);
+      const book = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(book, sheet, "Stock");
+      const buffer = XLSX.write(book, { bookType: "xlsx", type: "array" });
+      const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+      await downloadBlob(blob, `stock-export-${format(new Date(), "yyyyMMdd-HHmm")}.xlsx`);
+      toast({ title: "Export saved to Downloads" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const exportStockPDF = async () => {
+    try {
+      setIsExporting(true);
+      const doc = (
+        <StockReportPDF
+          products={filteredProducts}
+          businessName={useAppStore.getState().businessInfo.name}
+        />
+      );
+      const blob = await pdf(doc).toBlob();
+      await downloadBlob(blob, `stock-report-${format(new Date(), "yyyyMMdd-HHmm")}.pdf`);
+      toast({ title: "Export saved to Downloads" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -240,6 +328,24 @@ export default function Stocks() {
             </div>
             <div className="flex items-center gap-3">
               <PrintStockReportButton products={products} />
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isExporting || filteredProducts.length === 0}
+                onClick={exportStockExcel}
+                className="border-slate-200 text-slate-600 font-black uppercase tracking-widest text-[10px] h-12 px-6"
+              >
+                Export Excel
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={isExporting || filteredProducts.length === 0}
+                onClick={exportStockPDF}
+                className="border-slate-200 text-slate-600 font-black uppercase tracking-widest text-[10px] h-12 px-6"
+              >
+                Export PDF
+              </Button>
               {isAdmin && (
                 <Link to="/dashboard/stocks/create">
                   <Button className="bg-slate-900 hover:bg-slate-800 text-white font-black uppercase tracking-widest text-xs h-12 px-6">
@@ -445,7 +551,12 @@ export default function Stocks() {
                                         setNewSellingPrice(p.selling_price);
                                         setNewCostPrice(p.cost_price);
                                         setEditBaseUnitId(p.base_unit || "");
-                                        setEditProductUnits(p.product_units ? p.product_units.map(u => ({ ...u })) : []);
+                                        const units = p.product_units ? p.product_units.map(u => ({ ...u })) : [];
+                                        setEditProductUnits(units);
+                                        setHasVariations(units.some(u => !u.is_primary));
+                                        setBulkAdjustEnabled(false);
+                                        setBulkUnitId("");
+                                        setBulkQuantity(0);
                                       }}
                                       className="h-8 px-3 text-slate-400 hover:text-slate-900 hover:bg-slate-100"
                                     >
@@ -504,6 +615,59 @@ export default function Stocks() {
                                               </div>
                                             </div>
                                           </div>
+                                          <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl space-y-3 text-left">
+                                            <div className="flex items-center justify-between">
+                                              <div>
+                                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Bulk Adjustment</Label>
+                                                <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Enter quantities in packs/cartons</p>
+                                              </div>
+                                              <Switch
+                                                checked={bulkAdjustEnabled}
+                                                onCheckedChange={(checked) => {
+                                                  setBulkAdjustEnabled(checked);
+                                                  if (checked) {
+                                                    setBulkUnitId(editBaseUnitId || "");
+                                                  }
+                                                }}
+                                              />
+                                            </div>
+                                            {bulkAdjustEnabled && (
+                                              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                                <div className="space-y-1">
+                                                  <Label className="text-[9px] font-black uppercase text-slate-400">Unit</Label>
+                                                  <Select value={bulkUnitId} onValueChange={setBulkUnitId}>
+                                                    <SelectTrigger className="h-9 bg-white border-slate-200 font-bold text-xs">
+                                                      <SelectValue placeholder="Select Unit" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                      {commonUnits.map(unit => (
+                                                        <SelectItem key={unit.id} value={unit.id} className="font-bold uppercase text-[10px]">{unit.abbrev}</SelectItem>
+                                                      ))}
+                                                    </SelectContent>
+                                                  </Select>
+                                                </div>
+                                                <div className="space-y-1">
+                                                  <Label className="text-[9px] font-black uppercase text-slate-400">Quantity</Label>
+                                                  <Input
+                                                    type="number"
+                                                    min="0"
+                                                    value={bulkQuantity}
+                                                    onChange={(e) => setBulkQuantity(parseFloat(e.target.value) || 0)}
+                                                    className="h-9 bg-white border-slate-200 font-bold text-xs"
+                                                  />
+                                                </div>
+                                                <div className="space-y-1">
+                                                  <Label className="text-[9px] font-black uppercase text-slate-400">Base Units</Label>
+                                                  <Input
+                                                    type="number"
+                                                    value={Math.floor(quantityChange)}
+                                                    readOnly
+                                                    className="h-9 bg-slate-100 border-slate-200 font-bold text-xs text-slate-500"
+                                                  />
+                                                </div>
+                                              </div>
+                                            )}
+                                          </div>
                                           <div className="space-y-4 text-left">
                                             <div className="space-y-2">
                                               <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 text-left">Adjustment Quantity</Label>
@@ -551,6 +715,21 @@ export default function Stocks() {
 
                                         <TabsContent value="units" className="mt-6 space-y-4">
                                           <div className="space-y-4 text-left">
+                                            <div className="flex items-center justify-between p-4 bg-slate-50 border border-slate-100 rounded-xl">
+                                              <div>
+                                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Variations</Label>
+                                                <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">Enable to set price modifiers for packs/cartons</p>
+                                              </div>
+                                              <Switch
+                                                checked={hasVariations}
+                                                onCheckedChange={(checked) => {
+                                                  setHasVariations(checked);
+                                                  if (!checked) {
+                                                    setEditProductUnits(prev => prev.filter(u => u.is_primary));
+                                                  }
+                                                }}
+                                              />
+                                            </div>
                                             <div className="p-4 bg-slate-50 border border-slate-100 rounded-xl">
                                               <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2 block">Base Inventory Unit</Label>
                                               <Select value={editBaseUnitId} onValueChange={setEditBaseUnitId}>
@@ -566,60 +745,71 @@ export default function Stocks() {
                                               <p className="text-[9px] font-bold text-slate-400 uppercase mt-2">The smallest measurable unit for this product</p>
                                             </div>
 
-                                            <div className="space-y-3">
-                                              <div className="flex items-center justify-between px-1">
-                                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Marketable Units</Label>
-                                                <Button type="button" variant="outline" size="sm" onClick={addUnitRow} className="h-7 text-[9px] font-black uppercase rounded-lg border-slate-200">
-                                                  <PlusCircle className="w-3 h-3 mr-1" /> Add Unit
-                                                </Button>
-                                              </div>
+                                            {hasVariations ? (
+                                              <div className="space-y-3">
+                                                <div className="flex items-center justify-between px-1">
+                                                  <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Marketable Units</Label>
+                                                  <Button type="button" variant="outline" size="sm" onClick={addUnitRow} className="h-7 text-[9px] font-black uppercase rounded-lg border-slate-200">
+                                                    <PlusCircle className="w-3 h-3 mr-1" /> Add Unit
+                                                  </Button>
+                                                </div>
 
-                                              <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
-                                                {editProductUnits.filter(u => !u.is_primary).map((u, idx) => (
-                                                  <div key={idx} className="p-3 bg-white border border-slate-100 rounded-xl space-y-3 shadow-sm">
-                                                    <div className="grid grid-cols-2 gap-3">
-                                                      <div className="space-y-1">
-                                                        <Label className="text-[9px] font-black uppercase text-slate-400">Unit Type</Label>
-                                                        <Select value={u.unit_id} onValueChange={(val) => updateUnitRow(editProductUnits.indexOf(u), 'unit_id', val)}>
-                                                          <SelectTrigger className="h-9 bg-slate-50 border-none font-bold text-xs uppercase">
-                                                            <SelectValue placeholder="Unit" />
-                                                          </SelectTrigger>
-                                                          <SelectContent>
-                                                            {commonUnits.map(unit => (
-                                                              <SelectItem key={unit.id} value={unit.id} className="font-bold uppercase text-[10px]">{unit.abbrev}</SelectItem>
-                                                            ))}
-                                                          </SelectContent>
-                                                        </Select>
+                                                <div className="space-y-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                                                  {editProductUnits.filter(u => !u.is_primary).map((u, idx) => (
+                                                    <div key={idx} className="p-3 bg-white border border-slate-100 rounded-xl space-y-3 shadow-sm">
+                                                      <div className="grid grid-cols-2 gap-3">
+                                                        <div className="space-y-1">
+                                                          <Label className="text-[9px] font-black uppercase text-slate-400">Unit Type</Label>
+                                                          <Select value={u.unit_id} onValueChange={(val) => updateUnitRow(editProductUnits.indexOf(u), 'unit_id', val)}>
+                                                            <SelectTrigger className="h-9 bg-slate-50 border-none font-bold text-xs uppercase">
+                                                              <SelectValue placeholder="Unit" />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                              {commonUnits.map(unit => (
+                                                                <SelectItem key={unit.id} value={unit.id} className="font-bold uppercase text-[10px]">{unit.abbrev}</SelectItem>
+                                                              ))}
+                                                            </SelectContent>
+                                                          </Select>
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                          <Label className="text-[9px] font-black uppercase text-slate-400">Conv. Rate</Label>
+                                                          <Input type="number" value={u.conversion_to_base} onChange={(e) => updateUnitRow(editProductUnits.indexOf(u), 'conversion_to_base', parseFloat(e.target.value))} className="h-9 bg-slate-50 border-none font-bold text-xs" />
+                                                        </div>
                                                       </div>
-                                                      <div className="space-y-1">
-                                                        <Label className="text-[9px] font-black uppercase text-slate-400">Conv. Rate</Label>
-                                                        <Input type="number" value={u.conversion_to_base} onChange={(e) => updateUnitRow(editProductUnits.indexOf(u), 'conversion_to_base', parseFloat(e.target.value))} className="h-9 bg-slate-50 border-none font-bold text-xs" />
+                                                      <div className="flex items-center gap-2">
+                                                        <div className="flex-1 space-y-1">
+                                                          <Label className="text-[9px] font-black uppercase text-slate-400">Price Modifier (₦)</Label>
+                                                          <Input type="number" value={u.selling_price} onChange={(e) => updateUnitRow(editProductUnits.indexOf(u), 'selling_price', parseFloat(e.target.value))} className="h-9 bg-slate-50 border-none font-bold text-xs text-emerald-600" />
+                                                        </div>
+                                                        <div className="flex items-end h-full pt-4">
+                                                          <Button
+                                                            type="button"
+                                                            variant={u.is_primary ? "default" : "outline"}
+                                                            size="sm"
+                                                            onClick={() => updateUnitRow(editProductUnits.indexOf(u), 'is_primary', true)}
+                                                            className={cn("h-9 border-slate-100 text-[9px] font-black uppercase rounded-lg px-2", u.is_primary && "bg-slate-900 border-slate-900")}
+                                                          >
+                                                            {u.is_primary ? <CheckCircle2 className="w-3 h-3 mr-1" /> : "Primary"}
+                                                          </Button>
+                                                          <Button type="button" variant="ghost" size="sm" onClick={() => removeUnitRow(idx)} className="h-9 text-rose-500 hover:text-rose-600 hover:bg-rose-50 ml-1 rounded-lg">
+                                                            <Trash2 className="w-3.5 h-3.5" />
+                                                          </Button>
+                                                        </div>
                                                       </div>
                                                     </div>
-                                                    <div className="flex items-center gap-2">
-                                                      <div className="flex-1 space-y-1">
-                                                        <Label className="text-[9px] font-black uppercase text-slate-400">Price (₦)</Label>
-                                                        <Input type="number" value={u.selling_price} onChange={(e) => updateUnitRow(editProductUnits.indexOf(u), 'selling_price', parseFloat(e.target.value))} className="h-9 bg-slate-50 border-none font-bold text-xs text-emerald-600" />
-                                                      </div>
-                                                      <div className="flex items-end h-full pt-4">
-                                                        <Button
-                                                          type="button"
-                                                          variant={u.is_primary ? "default" : "outline"}
-                                                          size="sm"
-                                                          onClick={() => updateUnitRow(editProductUnits.indexOf(u), 'is_primary', true)}
-                                                          className={cn("h-9 border-slate-100 text-[9px] font-black uppercase rounded-lg px-2", u.is_primary && "bg-slate-900 border-slate-900")}
-                                                        >
-                                                          {u.is_primary ? <CheckCircle2 className="w-3 h-3 mr-1" /> : "Primary"}
-                                                        </Button>
-                                                        <Button type="button" variant="ghost" size="sm" onClick={() => removeUnitRow(idx)} className="h-9 text-rose-500 hover:text-rose-600 hover:bg-rose-50 ml-1 rounded-lg">
-                                                          <Trash2 className="w-3.5 h-3.5" />
-                                                        </Button>
-                                                      </div>
+                                                  ))}
+                                                  {editProductUnits.filter(u => !u.is_primary).length === 0 && (
+                                                    <div className="text-center py-6 border-2 border-dashed border-slate-100 rounded-2xl">
+                                                      <p className="text-[9px] font-black uppercase tracking-widest text-slate-300">No variation units added yet</p>
                                                     </div>
-                                                  </div>
-                                                ))}
+                                                  )}
+                                                </div>
                                               </div>
-                                            </div>
+                                            ) : (
+                                              <div className="text-center py-6 border-2 border-dashed border-slate-100 rounded-2xl">
+                                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-300">Enable variations to add price modifiers</p>
+                                              </div>
+                                            )}
                                           </div>
                                         </TabsContent>
                                       </Tabs>
@@ -629,15 +819,16 @@ export default function Stocks() {
                                       <DialogClose asChild>
                                         <Button variant="ghost" className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:bg-slate-100">Cancel</Button>
                                       </DialogClose>
-                                      <Button
-                                        onClick={handleUpdate}
-                                        disabled={
-                                          activeTab === "details" ? !editForm.name.trim() :
-                                            activeTab === "quantity" ? !quantityChange || !adjustmentReason.trim() :
-                                              (!newSellingPrice && !newCostPrice) || !adjustmentReason.trim()
-                                        }
-                                        className="h-10 px-8 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-lg"
-                                      >
+                                        <Button
+                                          onClick={handleUpdate}
+                                          disabled={
+                                            activeTab === "details" ? !editForm.name.trim() :
+                                              activeTab === "quantity" ? !quantityChange || !adjustmentReason.trim() :
+                                              activeTab === "price" ? ((!newSellingPrice && !newCostPrice) || !adjustmentReason.trim()) :
+                                                !editBaseUnitId
+                                          }
+                                          className="h-10 px-8 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-black uppercase tracking-widest rounded-lg"
+                                        >
                                         Save Changes
                                       </Button>
                                     </DialogFooter>

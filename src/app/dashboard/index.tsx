@@ -35,7 +35,7 @@ import {
   Cell,
   Legend
 } from 'recharts';
-import { getDashboardMetrics, getDailySales, getMonthlySalesByCashier, getAllTimeSalesByCashier, getTopCustomers, getRecentSales } from "@/database/dashboard";
+import { getDashboardMetrics, getDailySales, getMonthlySalesByCashier, getAllTimeSalesByCashier, getTopCustomers, getRecentSales, getTodaySales } from "@/database/dashboard";
 import { getDebtors } from "@/database/debtors";
 import { format } from "date-fns";
 import { Badge } from "@/components/ui/badge";
@@ -69,19 +69,22 @@ export default function DashboardPage() {
   const [topCustomers, setTopCustomers] = useState<any[]>([]);
   const [recentSales, setRecentSales] = useState<any[]>([]);
   const [debtors, setDebtors] = useState<any[]>([]);
+  const [todaySales, setTodaySales] = useState<{ amount: number; count: number } | null>(null);
 
   useEffect(() => {
     async function loadData() {
       setIsLoading(true);
       try {
-        const [m, ds, cs, atcs, tc, rs, d] = await Promise.all([
-          getDashboardMetrics(),
-          getDailySales(),
+        const shouldScopeToCashier = !hasFinancialAccess && !!user?.id;
+        const [m, ds, cs, atcs, tc, rs, d, ts] = await Promise.all([
+          getDashboardMetrics(shouldScopeToCashier ? user.id : undefined),
+          getDailySales(shouldScopeToCashier ? user.id : undefined),
           getMonthlySalesByCashier(),
           getAllTimeSalesByCashier(),
           getTopCustomers(5),
-          getRecentSales(5),
-          getDebtors()
+          getRecentSales(5, shouldScopeToCashier ? user.id : undefined),
+          getDebtors(),
+          shouldScopeToCashier ? getTodaySales(user.id) : Promise.resolve(null),
         ]);
         setMetrics(m);
         setDailySales(ds);
@@ -90,6 +93,7 @@ export default function DashboardPage() {
         setTopCustomers(tc);
         setRecentSales(rs);
         setDebtors(d.slice(0, 5));
+        setTodaySales(ts);
       } catch (error) {
         console.error("Dashboard data load error:", error);
       } finally {
@@ -142,21 +146,41 @@ export default function DashboardPage() {
       <div className="container mx-auto px-6 py-8">
         {/* Core Metrics Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-12">
-          {/* Revenue Card (restricted) */}
-          <Card className={`bg-white border-slate-200 shadow-sm hover:shadow-md transition-all group overflow-hidden rounded-3xl ${!hasFinancialAccess ? 'opacity-50 grayscale' : ''}`}>
-            <CardContent className="p-8 relative">
-              <div className="flex justify-between items-start mb-6">
-                <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-900 group-hover:bg-slate-900 group-hover:text-white transition-all duration-300">
-                  <DollarSign className="w-6 h-6" />
+          {/* Revenue (admin/manager) or Today Sales (cashier) */}
+          {hasFinancialAccess ? (
+            <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-all group overflow-hidden rounded-3xl">
+              <CardContent className="p-8 relative">
+                <div className="flex justify-between items-start mb-6">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center text-slate-900 group-hover:bg-slate-900 group-hover:text-white transition-all duration-300">
+                    <DollarSign className="w-6 h-6" />
+                  </div>
+                  <Badge className="bg-emerald-50 text-emerald-600 border-none text-[9px] font-black uppercase tracking-widest">Live</Badge>
                 </div>
-                <Badge className="bg-emerald-50 text-emerald-600 border-none text-[9px] font-black uppercase tracking-widest">Live</Badge>
-              </div>
-              <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Total Revenue</p>
-              <h2 className="text-3xl font-black text-slate-900 tracking-tighter">
-                {hasFinancialAccess ? `₦${(metrics?.totalSales || 0).toLocaleString()}` : '•••••'}
-              </h2>
-            </CardContent>
-          </Card>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Total Revenue</p>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tighter">
+                  ₦{(metrics?.totalSales || 0).toLocaleString()}
+                </h2>
+              </CardContent>
+            </Card>
+          ) : (
+            <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-all group overflow-hidden rounded-3xl">
+              <CardContent className="p-8 relative">
+                <div className="flex justify-between items-start mb-6">
+                  <div className="w-12 h-12 rounded-2xl bg-slate-900 flex items-center justify-center text-white">
+                    <Activity className="w-6 h-6" />
+                  </div>
+                  <Badge className="bg-slate-100 text-slate-600 border-none text-[9px] font-black uppercase tracking-widest">Today</Badge>
+                </div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Today&apos;s Sales</p>
+                <h2 className="text-3xl font-black text-slate-900 tracking-tighter">
+                  ₦{(todaySales?.amount || 0).toLocaleString()}
+                </h2>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-2">
+                  {todaySales?.count || 0} sale{(todaySales?.count || 0) === 1 ? "" : "s"}
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Customers Card */}
           <Card className="bg-white border-slate-200 shadow-sm hover:shadow-md transition-all group overflow-hidden rounded-3xl">
@@ -462,20 +486,7 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            {/* Placeholder for Cashiers if everything else is hidden */}
-            {!hasFinancialAccess && (
-              <Card className="bg-slate-900 border-slate-800 shadow-sm overflow-hidden flex flex-col justify-center items-center p-12 text-center rounded-3xl relative">
-                <div className="absolute top-0 left-0 w-full h-full opacity-10 pointer-events-none">
-                  <div className="absolute top-10 left-10 w-40 h-40 bg-white/20 rounded-full blur-[80px]" />
-                  <div className="absolute bottom-10 right-10 w-40 h-40 bg-white/20 rounded-full blur-[80px]" />
-                </div>
-                <div className="w-20 h-20 rounded-3xl bg-white/10 flex items-center justify-center text-white mb-8 border border-white/10">
-                  <Activity className="w-10 h-10" />
-                </div>
-                <h4 className="text-base font-black uppercase tracking-[0.2em] text-white mb-3">Active Session</h4>
-                <p className="text-[10px] font-bold text-slate-500 uppercase leading-relaxed max-w-[200px]">Data restrictions active. Contact management for full analytics access.</p>
-              </Card>
-            )}
+            {/* Cashier view handled in top metrics */}
           </div>
         </div>
       </div>

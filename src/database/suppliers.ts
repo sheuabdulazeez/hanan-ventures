@@ -39,3 +39,25 @@ export async function deleteSupplier(id: string) {
     const db = await initDatabase();
     await db.execute('DELETE FROM suppliers WHERE id = $1', [id]);
 }
+
+export async function getSupplierPurchaseOrderCount(supplierId: string) {
+    const db = await initDatabase();
+    const result = await db.selectOne<{ count: number }>(
+        'SELECT COUNT(*) as count FROM purchase_orders WHERE supplier_id = $1',
+        [supplierId]
+    );
+    return Number(result?.count || 0);
+}
+
+export async function deleteSupplierWithOrders(id: string) {
+    const db = await initDatabase();
+    try {
+        await db.beginTransaction();
+        await db.executeQuery('DELETE FROM purchase_orders WHERE supplier_id = $1', [id]);
+        await db.executeQuery('DELETE FROM suppliers WHERE id = $1', [id]);
+        await db.commit();
+    } catch (error) {
+        try { await db.rollback(); } catch { }
+        throw error;
+    }
+}

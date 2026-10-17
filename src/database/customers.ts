@@ -24,7 +24,6 @@ export async function createCustomer(customer: Omit<TCustomer, "id" | "created_a
 
 export async function updateCustomer(id: string, customer: Partial<Omit<TCustomer, "id" | "created_at" | "updated_at">>) {
     const db = await initDatabase();
-    console.log(customer)
     const filteredEntries = Object.entries(customer)
         .filter(([_, value]) => value !== undefined);
     

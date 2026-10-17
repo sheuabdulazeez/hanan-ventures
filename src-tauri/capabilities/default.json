@@ -9,8 +9,6 @@
   "permissions": [
     "core:default",
     "opener:default",
-    "sql:default",
-    "sql:allow-execute",
     "store:default",
     "core:webview:allow-print",
     "core:window:allow-create",
@@ -24,7 +22,7 @@
       "identifier": "fs:write-all",
       "allow": [
         {
-          "path": "$APPDATA/*"
+          "path": "$APPDATA/logo.png"
         }
       ]
     },
@@ -32,7 +30,7 @@
       "identifier": "fs:read-all",
       "allow": [
         {
-          "path": "$APPDATA/*"
+          "path": "$APPDATA/logo.png"
         }
       ]
     }

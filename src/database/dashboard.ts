@@ -45,19 +45,25 @@ export interface SalesByCashier {
     amount: number;
 }
 
+export interface TodaySales {
+    amount: number;
+    count: number;
+}
+
 export async function getDashboardMetrics(cashierId?: string) {
     const db = await initDatabase();
 
     try {
+        const params = cashierId ? [cashierId] : [];
         const [metrics] = await db.select<[DashboardMetrics]>(`
             SELECT 
-                (SELECT COALESCE(SUM(total_amount), 0) FROM sales ${cashierId ? `WHERE employee_id = "${cashierId}"` : ""}) as totalSales,
+                (SELECT COALESCE(SUM(total_amount - returned_amount), 0) FROM sales ${cashierId ? `WHERE employee_id = $1` : ""}) as totalSales,
                 (SELECT COUNT(*) FROM customers WHERE id != 'WALK-IN') as totalCustomers,
                 (SELECT COUNT(*) FROM products) as totalProducts,
                 (SELECT COALESCE(SUM(amount_owed), 0) FROM debtors WHERE is_paid = 0) as totalDebt,
-                (SELECT COALESCE(AVG(total_amount), 0) FROM sales ${cashierId ? `WHERE employee_id = "${cashierId}"` : ""}) as averageOrderValue,
+                (SELECT COALESCE(AVG(total_amount - returned_amount), 0) FROM sales WHERE status <> 'voided' ${cashierId ? `AND employee_id = $1` : ""}) as averageOrderValue,
                 (SELECT COALESCE(SUM(amount), 0) FROM business_expenses) as totalExpenses
-        `);
+        `, params);
 
         return metrics;
     } catch (error) {
@@ -72,23 +78,21 @@ export async function getDailySales(cashierId?: string): Promise<DailySales[]> {
     try {
         return await db.select<DailySales[]>(`
             WITH RECURSIVE days AS (
-                SELECT date('now', 'start of month') as date
+                SELECT date('now', 'localtime', 'start of month') as date
                 UNION ALL
                 SELECT date(date, '+1 day')
                 FROM days
-                WHERE date < date('now')
+                WHERE date < date('now', 'localtime')
             )
             SELECT 
                 days.date,
-                COALESCE(SUM(s.total_amount), 0) as amount
+                COALESCE(SUM(s.total_amount - s.returned_amount), 0) as amount
             FROM days
-            LEFT JOIN sales s ON date(s.created_at) = days.date
-                AND strftime('%m', s.created_at) = strftime('%m', 'now')
-                AND strftime('%Y', s.created_at) = strftime('%Y', 'now')
-            ${cashierId ? `AND s.employee_id = "${cashierId}"` : ""}
+            LEFT JOIN sales s ON date(s.created_at, 'localtime') = days.date
+            ${cashierId ? `AND s.employee_id = $1` : ""}
             GROUP BY days.date
             ORDER BY days.date
-        `);
+        `, cashierId ? [cashierId] : []);
     } catch (error) {
         console.error('Error fetching daily sales:', error);
         throw error;
@@ -103,29 +107,30 @@ export async function getWeeklySales(cashierId?: string): Promise<WeeklySales[]>
             WITH RECURSIVE weeks AS (
                 -- Get first day of current month
                 SELECT 
-                    date('now', 'start of month') as start_date,
-                    date('now', 'start of month', '+6 days') as end_date,
+                    date('now', 'localtime', 'start of month') as start_date,
+                    date('now', 'localtime', 'start of month', '+6 days') as end_date,
                     1 as week_number
                 UNION ALL
                 SELECT 
                     date(start_date, '+7 days'),
-                    date(end_date, '+7 days'),
+                    -- the last week runs to month end so days 29-31 aren't dropped
+                    CASE WHEN week_number + 1 = 4
+                         THEN date('now', 'localtime', 'start of month', '+1 month', '-1 day')
+                         ELSE date(end_date, '+7 days') END,
                     week_number + 1
                 FROM weeks 
                 WHERE week_number < 4
             )
             SELECT 
                 'Week ' || weeks.week_number as week,
-                COALESCE(SUM(s.total_amount), 0) as amount
+                COALESCE(SUM(s.total_amount - s.returned_amount), 0) as amount
             FROM weeks
-            LEFT JOIN sales s ON date(s.created_at) >= weeks.start_date 
-                AND date(s.created_at) <= weeks.end_date
-                AND strftime('%m', s.created_at) = strftime('%m', 'now')
-                AND strftime('%Y', s.created_at) = strftime('%Y', 'now')
-                ${cashierId ? `AND s.employee_id = "${cashierId}"` : ""}
+            LEFT JOIN sales s ON date(s.created_at, 'localtime') >= weeks.start_date 
+                AND date(s.created_at, 'localtime') <= weeks.end_date
+                ${cashierId ? `AND s.employee_id = $1` : ""}
             GROUP BY weeks.week_number
             ORDER BY weeks.week_number
-        `);
+        `, cashierId ? [cashierId] : []);
     } catch (error) {
         console.error('Error fetching weekly sales:', error);
         throw error;
@@ -139,11 +144,10 @@ export async function getMonthlySalesByCashier(): Promise<SalesByCashier[]> {
         return await db.select<SalesByCashier[]>(`
             SELECT 
                 u.name,
-                COALESCE(SUM(s.total_amount), 0) as amount
+                COALESCE(SUM(s.total_amount - s.returned_amount), 0) as amount
             FROM users u
             LEFT JOIN sales s ON u.id = s.employee_id 
-                AND strftime('%m', s.created_at) = strftime('%m', 'now')
-                AND strftime('%Y', s.created_at) = strftime('%Y', 'now')
+                AND strftime('%Y-%m', s.created_at, 'localtime') = strftime('%Y-%m', 'now', 'localtime')
             -- WHERE u.role != 'admin'
             GROUP BY u.id, u.name
             ORDER BY amount DESC
@@ -161,7 +165,7 @@ export async function getAllTimeSalesByCashier(): Promise<SalesByCashier[]> {
         return await db.select<SalesByCashier[]>(`
             SELECT 
                 u.name,
-                COALESCE(SUM(s.total_amount), 0) as amount
+                COALESCE(SUM(s.total_amount - s.returned_amount), 0) as amount
             FROM users u
             LEFT JOIN sales s ON u.id = s.employee_id 
             GROUP BY u.id, u.name
@@ -181,8 +185,8 @@ export async function getTopProducts(limit: number = 5): Promise<TopProduct[]> {
             SELECT 
                 p.name,
                 COUNT(si.id) as total_sales,
-                SUM(si.quantity) as total_quantity,
-                SUM(si.total_price) as total_revenue
+                SUM(si.quantity - si.returned_quantity) as total_quantity,
+                SUM(si.total_price * (si.quantity - si.returned_quantity) / si.quantity) as total_revenue
             FROM products p
             LEFT JOIN sale_items si ON p.id = si.product_id
             GROUP BY p.id, p.name
@@ -203,8 +207,8 @@ export async function getTopCustomers(limit: number = 5): Promise<TopCustomer[]>
             SELECT 
                 c.name,
                 c.email,
-                COUNT(s.id) as total_orders,
-                SUM(s.total_amount) as total_purchases
+                COUNT(CASE WHEN s.status <> 'voided' THEN s.id END) as total_orders,
+                SUM(s.total_amount - s.returned_amount) as total_purchases
             FROM customers c
             LEFT JOIN sales s ON c.id = s.customer_id
             WHERE c.id != 'WALK-IN'
@@ -225,20 +229,43 @@ export async function getRecentSales(limit: number = 5, cashierId?: string): Pro
         return await db.select<RecentSale[]>(`
             SELECT 
                 s.id,
-                s.total_amount as amount,
+                (s.total_amount - s.returned_amount) as amount,
                 s.created_at as date,
                 c.name as customer,
                 u.name as cashier
             FROM sales s
             LEFT JOIN customers c ON s.customer_id = c.id
             LEFT JOIN users u ON s.employee_id = u.id
-            ${cashierId ? `WHERE employee_id = "${cashierId}"` : ""}
+            ${cashierId ? `WHERE s.employee_id = $2` : ""}
             ORDER BY s.created_at DESC
             LIMIT $1
-        `, [limit]);
+        `, cashierId ? [limit, cashierId] : [limit]);
     } catch (error) {
         console.error('Error fetching recent sales:', error);
         throw error;
     }
 }
 
+export async function getTodaySales(cashierId: string): Promise<TodaySales> {
+    const db = await initDatabase();
+
+    try {
+        const result = await db.selectOne<TodaySales>(`
+            SELECT 
+                COALESCE(SUM(total_amount - returned_amount), 0) as amount,
+                COUNT(*) as count
+            FROM sales
+            WHERE status <> 'voided'
+              AND date(created_at, 'localtime') = date('now', 'localtime')
+              AND employee_id = $1
+        `, [cashierId]);
+
+        return {
+            amount: Number(result?.amount || 0),
+            count: Number(result?.count || 0),
+        };
+    } catch (error) {
+        console.error('Error fetching today sales:', error);
+        throw error;
+    }
+}

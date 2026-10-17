@@ -66,8 +66,25 @@ export default function ReceivePO({ onUpdate }: { onUpdate?: () => void }) {
         }
     };
 
+    const getRemaining = (item: NonNullable<PurchaseOrder["items"]>[number]) => {
+        const receivedInUnit = (item.quantity_received_base || 0) / (item.conversion_to_base || 1);
+        return Math.max(0, item.quantity_ordered - receivedInUnit);
+    };
+
     const handleQuantityChange = (productId: string, qty: string) => {
-        const val = parseInt(qty) || 0;
+        let val = parseInt(qty) || 0;
+        const item = selectedPO?.items?.find(i => i.product_id === productId);
+        if (item) {
+            const remaining = getRemaining(item);
+            if (val > remaining) {
+                toast({
+                    title: "Exceeds remaining quantity",
+                    description: `Only ${remaining} of ${item.product_name} is still outstanding on this order.`,
+                    variant: "destructive",
+                });
+                val = remaining;
+            }
+        }
         setReceivedQuantities(prev => ({
             ...prev,
             [productId]: val
@@ -76,6 +93,19 @@ export default function ReceivePO({ onUpdate }: { onUpdate?: () => void }) {
 
     const handleSubmit = async () => {
         if (!selectedPO || !user) return;
+
+        for (const item of selectedPO.items || []) {
+            const qty = receivedQuantities[item.product_id] || 0;
+            if (qty > getRemaining(item)) {
+                toast({
+                    title: "Cannot submit",
+                    description: `Received quantity for ${item.product_name} exceeds what's still outstanding.`,
+                    variant: "destructive",
+                });
+                return;
+            }
+        }
+
         setSubmitting(true);
         try {
             const itemsToReceive = Object.entries(receivedQuantities).map(([pid, qty]) => {
@@ -154,7 +184,7 @@ export default function ReceivePO({ onUpdate }: { onUpdate?: () => void }) {
                                     <tbody className="divide-y divide-slate-50">
                                         {selectedPO.items?.map(item => {
                                             const receivedInUnit = (item.quantity_received_base || 0) / (item.conversion_to_base || 1);
-                                            const remaining = Math.max(0, item.quantity_ordered - receivedInUnit);
+                                            const remaining = getRemaining(item);
 
                                             // Format received to remove decimal if clean integer
                                             const receivedDisplay = Number.isInteger(receivedInUnit) ? receivedInUnit : receivedInUnit.toFixed(2);
@@ -173,6 +203,7 @@ export default function ReceivePO({ onUpdate }: { onUpdate?: () => void }) {
                                                         <Input
                                                             type="number"
                                                             min="0"
+                                                            max={remaining}
                                                             className="h-9 text-center font-bold"
                                                             value={receivedQuantities[item.product_id] || 0}
                                                             onChange={(e) => handleQuantityChange(item.product_id, e.target.value)}

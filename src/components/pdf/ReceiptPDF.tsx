@@ -14,9 +14,9 @@ const styles = StyleSheet.create({
   page: {
     margin: 0,
     paddingTop: "1mm",
-    paddingLeft: "4mm",
-    paddingRight: "4mm",
-    paddingBottom: "2mm",
+    paddingLeft: "1mm",
+    paddingRight: "1mm",
+    paddingBottom: "1mm",
     backgroundColor: "#ffffff",
     fontFamily: "Helvetica", // Tahoma isn't built-in, Helvetica is the closest standard
     color: "#000",
@@ -25,11 +25,13 @@ const styles = StyleSheet.create({
   headerSection: { alignItems: "center", marginBottom: 6, textAlign: "center" },
   logo: { width: 60, height: 60, marginBottom: 5, objectFit: "contain" },
   businessName: {
-    fontSize: 16,
+    fontSize: 18,
     fontFamily: "Helvetica-Bold",
     textTransform: "uppercase",
+    flexWrap: "wrap",
+    overflowWrap: "break-word"
   },
-  businessInfo: { fontSize: 8, textAlign: "center", marginTop: 2 },
+  businessInfo: { fontSize: 9, textAlign: "center", marginTop: 2 },
 
   // Dividers
   separator: {
@@ -54,30 +56,55 @@ const styles = StyleSheet.create({
   },
 
   // Table Simulation
-  table: { marginTop: 5, borderTopWidth: 1, borderTopColor: "#000" },
+  table: { marginTop: 5, borderTopWidth: 1,  borderColor: '#000' },
   tableHeader: {
     flexDirection: "row",
     backgroundColor: "#f0f0f0",
-    borderBottomWidth: 1,
-    borderBottomColor: "#000",
-    padding: 2,
   },
   tableRow: {
     flexDirection: "row",
-    borderBottomWidth: 0.5,
-    borderBottomColor: "#000",
-    padding: 3,
   },
 
   // Column Widths (matching your HTML %)
-  qtyCol: { width: "15%", textAlign: "center", fontSize: 8 },
-  itemCol: { width: "45%", textAlign: "left", fontSize: 8 },
-  priceCol: { width: "20%", textAlign: "right", fontSize: 8 },
+  qtyCol: { 
+    width: "17%", 
+    textAlign: "center", 
+    fontSize: 8, 
+    borderRightWidth: 1, 
+    borderBottomWidth: 1, 
+    borderColor: '#000', 
+    padding: 1,
+    paddingVertical:2
+  },
+  itemCol: { 
+    width: "40%", 
+    textAlign: "left", 
+    fontSize: 8, 
+    borderRightWidth: 1, 
+    borderBottomWidth: 1, 
+    borderColor: '#000', 
+    padding: 1,
+    paddingVertical:2
+  },
+  priceCol: { 
+    width: "20%", 
+    textAlign: "right", 
+    fontSize: 8, 
+    borderRightWidth: 1, 
+    borderBottomWidth: 1, 
+    borderColor: '#000', 
+    padding: 1,
+    paddingVertical:2
+  },
   totalCol: {
-    width: "20%",
+    width: "23%",
     textAlign: "right",
     fontSize: 8,
     fontFamily: "Helvetica-Bold",
+    borderBottomWidth: 1, 
+    borderColor: '#000', 
+    padding: 1,
+    paddingVertical:2
   },
 
   // Totals
@@ -100,7 +127,7 @@ const styles = StyleSheet.create({
 
   // Helpers
   bold: { fontFamily: "Helvetica-Bold" },
-  extraBold: { fontFamily: "Helvetica-Bold", fontSize: 12 },
+  extraBold: { fontFamily: "Helvetica-Bold", fontSize: 10 },
   footer: {
     textAlign: "center",
     fontSize: 8,
@@ -225,12 +252,23 @@ const ReceiptPDF = ({
 
   const width = receiptSettings?.paperSize === "58mm" ? 164 : 227;
 
-  // Dynamic height calculation
-  const logoHeight = businessInfo?.logo ? 70 : 0;
-  const outstandingHeight = outstanding > 0 ? 25 : 0;
-  const baseHeight = 250 + logoHeight + outstandingHeight; // Core elements + buffer
-  const itemRowHeight = 30; // Height per item row
-  const finalHeight = baseHeight + (items?.length || 0) * itemRowHeight;
+  // Dynamic height calculation (in points). Keep it tight but avoid multi-page receipts.
+  const logoHeight = businessInfo?.logo ? 60 : 0;
+  const outstandingHeight = outstanding > 0 ? 22 : 0;
+  const changeHeight = change > 0 ? 18 : 0;
+  const debtHeight = customerDebt ? 44 : 0;
+  const footerHeight = 60; // footer text + cut line + contact line
+  const baseHeight = 270 + logoHeight + outstandingHeight + changeHeight + debtHeight + footerHeight;
+
+  const charsPerLine = receiptSettings?.paperSize === "58mm" ? 20 : 28;
+  const itemHeights = (items || []).map((item) => {
+    const nameLength = item.product_name ? item.product_name.length : 0;
+    const lines = Math.max(1, Math.ceil(nameLength / charsPerLine));
+    return 15 + (lines - 1) * 10;
+  });
+  const itemsHeight = itemHeights.reduce((sum, h) => sum + h, 0);
+
+  const finalHeight = baseHeight + itemsHeight;
 
   return (
     <Document>
@@ -247,9 +285,9 @@ const ReceiptPDF = ({
             {businessInfo?.name || "Business Name"}
           </Text>
           <Text style={styles.businessInfo}>
-            {businessInfo.address ? `${businessInfo.address}` : ""}$
-            {businessInfo.city || businessInfo.state || businessInfo.zipCode
-              ? `${[businessInfo.city, businessInfo.state, businessInfo.zipCode].filter(Boolean).join(", ")}`
+            {businessInfo.address ? `${businessInfo.address}` : ""}
+            {businessInfo.city || businessInfo.state
+              ? `${[businessInfo.city, businessInfo.state].filter(Boolean).join(", ")}`
               : ""}
           </Text>
           {businessInfo?.phone? <Text style={styles.businessInfo}>
@@ -293,7 +331,7 @@ const ReceiptPDF = ({
           <View style={styles.tableHeader}>
             <Text style={[styles.qtyCol, styles.bold]}>Qty</Text>
             <Text style={[styles.itemCol, styles.bold]}>Item</Text>
-            <Text style={[styles.itemCol, styles.bold]}>Price</Text>
+            <Text style={[styles.priceCol, styles.bold]}>Price</Text>
             <Text style={[styles.totalCol, styles.bold]}>Total</Text>
           </View>
           {items?.map((item, i) => (
@@ -303,7 +341,7 @@ const ReceiptPDF = ({
                 {item.unit_abbrev ? `${item.unit_abbrev}` : ""}
               </Text>
               <Text style={styles.itemCol}>{item.product_name}</Text>
-              <Text style={styles.itemCol}>{item.unit_price.toLocaleString()}</Text>
+              <Text style={styles.priceCol}>{item.unit_price.toLocaleString()}</Text>
               <Text style={styles.totalCol}>
                 {item.total_price.toLocaleString()}
               </Text>
@@ -323,7 +361,7 @@ const ReceiptPDF = ({
         </View>
 
         {/* Payment Detail */}
-        <View style={[styles.flexRow]}>
+        <View style={[styles.flexRow, { fontSize: 10 }]}>
           <Text style={styles.bold}>Amount Paid:</Text>
           <Text>
             {systemSettings?.currencySymbol}
@@ -332,7 +370,7 @@ const ReceiptPDF = ({
         </View>
 
         {change > 0 && (
-          <View style={[styles.flexRow, styles.outstanding, { fontSize: 12 }]}>
+          <View style={[styles.flexRow, styles.outstanding, { fontSize: 10 }]}>
             <Text style={styles.bold}>CHANGE:</Text>
             <Text>
               {systemSettings?.currencySymbol}
@@ -342,7 +380,7 @@ const ReceiptPDF = ({
         )}
 
         {outstanding > 0 && (
-          <View style={[styles.flexRow, styles.outstanding, { fontSize: 12 }]}>
+          <View style={[styles.flexRow, styles.outstanding, { fontSize: 10 }]}>
             <Text style={styles.bold}>OUTSTANDING:</Text>
             <Text>
               {systemSettings?.currencySymbol}
@@ -356,15 +394,15 @@ const ReceiptPDF = ({
           <>
             <View style={styles.separator} />
             <View style={styles.totalsSection}>
-              <View style={[styles.flexRow, { fontSize: 12 }]}>
+              <View style={[styles.flexRow, { fontSize: 10 }]}>
                 <Text style={styles.bold}>Previous Balance:</Text>
                 <Text>{systemSettings?.currencySymbol}{customerDebt.previousBalance.toLocaleString()}</Text>
               </View>
-              <View style={[styles.flexRow, { fontSize: 12 }]}>
+              <View style={[styles.flexRow, { fontSize: 10 }]}>
                 <Text style={styles.bold}>Current Balance:</Text>
                 <Text>{systemSettings?.currencySymbol}{customerDebt.currentBalance.toLocaleString()}</Text>
               </View>
-              <View style={[styles.flexRow, styles.outstanding, { fontSize: 12 }]}>
+              <View style={[styles.flexRow, styles.outstanding, { fontSize: 10 }]}>
                 <Text style={styles.extraBold}>Total Balance:</Text>
                 <Text style={styles.extraBold}>{systemSettings?.currencySymbol}{customerDebt.totalBalance.toLocaleString()}</Text>
               </View>
@@ -378,10 +416,9 @@ const ReceiptPDF = ({
           <Text>
             {receiptSettings?.footerText || "Thank you for your business!"}
           </Text>
-          <Text>Contact +2347040861356 if you need receipt like this.</Text>
         </View>
-
         <Text style={styles.cutLine}>✂ ============================= ✂</Text>
+        <Text style={{fontSize: 7, marginTop: 2, textAlign: "center"}}>Contact +2347040861356 if you need receipt like this.</Text>
       </Page>
     </Document>
   );

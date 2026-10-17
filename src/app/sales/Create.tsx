@@ -1,28 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { CustomerSelect } from "@components/CustomerSelect";
-import { ProductSelect } from "@components/ProductSelect";
 import { Button } from "@components/ui/button";
 import { Input } from "@components/ui/input";
 import { Label } from "@components/ui/label";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@components/ui/table";
 import { toast } from "@/hooks/use-toast";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@components/ui/card";
 import { ActiveSale, SALE_SaleItem } from "@/types/sales";
 import {
   Loader2,
@@ -39,7 +22,7 @@ import {
   Smartphone,
   Package,
 } from "lucide-react";
-import { PaymentModal, PaymentDetails } from "@components/SalesPaymentModal";
+import { PaymentDetails } from "@components/SalesPaymentModal";
 import { InvoiceModal } from "@components/InvoiceModal";
 import { ScrollArea } from "@components/ui/scroll-area";
 import { Badge } from "@components/ui/badge";
@@ -55,6 +38,7 @@ import { PaymentMethod, TCustomer, TProduct, TSale } from "@/types/database";
 import { getProducts } from "@/database/products";
 import { createCustomer, ensureWalkInCustomer, getCustomers } from "@/database/customers";
 import { createSale } from "@/database/sales";
+import { round2 } from "@/database";
 import { useAppStore } from "@/lib/store";
 import { randomString, cn } from "@/lib/utils";
 
@@ -98,6 +82,7 @@ const CATEGORIES = [
 
 export default function CreateSales() {
   const { auth, activeSales, addActiveSale, updateActiveSale, removeActiveSale } = useAppStore();
+  const submittingRef = useRef(false);
   const [customers, setCustomers] = useState<TCustomer[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [currentSaleId, setCurrentSaleId] = useState<string | null>(() => activeSales.find(s => s.status === "active")?.id);
@@ -168,7 +153,7 @@ export default function CreateSales() {
 
     const total = currentSale.total;
     const paid = payments.reduce((sum, p) => sum + p.amount, 0);
-    const remaining = total - paid;
+    const remaining = round2(total - paid);
 
     if (remaining <= 0) return;
     setPayments([...payments, { method, amount: remaining }]);
@@ -180,7 +165,7 @@ export default function CreateSales() {
 
   const updatePaymentAmount = (index: number, amount: number) => {
     const newPayments = [...payments];
-    newPayments[index].amount = amount;
+    newPayments[index].amount = amount > 0 ? amount : 0;
     setPayments(newPayments);
   };
 
@@ -234,6 +219,7 @@ export default function CreateSales() {
     const primaryUnit = getPrimaryUnit(product);
     const targetUnitId = unitId || primaryUnit?.unit_id || product.base_unit;
     const productUnit = getProductUnit(product, targetUnitId);
+    const availableStock = getAvailableStock(product, targetUnitId);
 
     const existingItem = currentSale.items.find(
       (item) => item.product_id === product.id && (item as any).unit_used === targetUnitId
@@ -241,8 +227,24 @@ export default function CreateSales() {
 
     if (existingItem) {
       const newQuantity = existingItem.quantity + 1;
+      if (newQuantity > availableStock) {
+        toast({
+          title: "Not enough stock",
+          description: `Only ${availableStock} of ${product.name} available.`,
+          variant: "destructive",
+        });
+        return;
+      }
       updateQuantity(currentSale.items.indexOf(existingItem), newQuantity);
     } else {
+      if (availableStock <= 0) {
+        toast({
+          title: "Out of stock",
+          description: `${product.name} has no stock available.`,
+          variant: "destructive",
+        });
+        return;
+      }
       const unitPrice = productUnit ? productUnit.selling_price : product.selling_price;
 
       const newSaleItem: SALE_SaleItem & { unit_used?: string; unit_info?: CommonUnit } = {
@@ -274,8 +276,19 @@ export default function CreateSales() {
     const updatedItems = [...currentSale.items];
     const item = updatedItems[index];
 
+    const availableStock = getAvailableStock(item.product as Product, (item as any).unit_used);
+    if (quantity > availableStock) {
+      toast({
+        title: "Not enough stock",
+        description: `Only ${availableStock} of ${item.product?.name ?? "this item"} available.`,
+        variant: "destructive",
+      });
+      quantity = availableStock;
+    }
+    if (quantity < 0) quantity = 0;
+
     updatedItems[index].quantity = quantity;
-    updatedItems[index].total_price = quantity * item.unit_price;
+    updatedItems[index].total_price = round2(quantity * item.unit_price);
     updateCurrentSale({ items: updatedItems });
   };
 
@@ -288,8 +301,9 @@ export default function CreateSales() {
     if (!currentSale) return;
 
     const updatedItems = [...currentSale.items];
+    if (!(price >= 0)) price = 0;
     updatedItems[index].unit_price = price;
-    updatedItems[index].total_price = updatedItems[index].quantity * price;
+    updatedItems[index].total_price = round2(updatedItems[index].quantity * price);
     updateCurrentSale({ items: updatedItems });
   };
 
@@ -302,17 +316,21 @@ export default function CreateSales() {
   };
 
   const calculateTotal = (sale: ActiveSale) => {
-    return sale.items.reduce(
-      (total, item) => total + item.quantity * item.unit_price,
-      0
+    return round2(
+      sale.items.reduce((total, item) => total + item.quantity * item.unit_price, 0)
     );
   };
 
   const handlePaymentSubmit = async (details: PaymentDetails) => {
-    setIsLoading(true);
+    // Synchronous guard: state updates are async, so a fast double-click could
+    // otherwise submit the same sale twice before `isLoading` takes effect.
+    if (submittingRef.current) return;
 
     const currentSale = getCurrentSale();
     if (!currentSale || !currentSale.customer) return;
+
+    submittingRef.current = true;
+    setIsLoading(true);
 
     try {
       const finalPayments = details.payments.map(p => ({
@@ -322,23 +340,34 @@ export default function CreateSales() {
         reference_number: p.reference_number || ""
       }));
 
+      // A held sale keeps the product as it was when the item was added, which can be
+      // days old. Cost and unit conversion must come from the product as it is NOW, or
+      // profit is recorded against a stale cost.
+      const freshProducts = (await getProducts()) as unknown as Product[];
+      const freshById = new Map(freshProducts.map((p) => [p.id, p]));
+
       // Prepare sale items - converting to base units for database stock management
       const saleItems = currentSale.items.map((item: any) => {
-        const productUnit = getProductUnit(item.product, item.unit_used);
+        const product = freshById.get(item.product.id);
+        if (!product) {
+          throw new Error(`${item.product.name} no longer exists. Remove it from the sale.`);
+        }
+        const productUnit = getProductUnit(product, item.unit_used);
         const conversion = productUnit?.conversion_to_base || 1;
 
         // baseQuantity is what decrements from the product table
         const baseQuantity = item.quantity * conversion;
+        const costPrice = Number(product.cost_price) || 0;
 
         return {
-          product_id: item.product.id,
+          product_id: product.id,
           quantity: item.quantity, // What was sold (e.g. 1 Bag)
           unit_price: item.unit_price,
           total_price: item.total_price,
           unit_used: item.unit_used,
           base_quantity: baseQuantity, // Total base units consumed
-          cost_price_at_sale: item.product.cost_price, // Base unit cost
-          profit: item.total_price - (baseQuantity * item.product.cost_price),
+          cost_price_at_sale: costPrice, // Base unit cost
+          profit: item.total_price - (baseQuantity * costPrice),
         };
       });
 
@@ -409,6 +438,7 @@ export default function CreateSales() {
         variant: "destructive",
       });
     } finally {
+      submittingRef.current = false;
       setIsLoading(false);
     }
   };
@@ -539,7 +569,7 @@ export default function CreateSales() {
         </div>
 
         {/* Categories grid */}
-        <div className="px-6 py-4 border-b border-slate-200">
+        {/* <div className="px-6 py-4 border-b border-slate-200">
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setSelectedCategory("ALL")}
@@ -567,7 +597,7 @@ export default function CreateSales() {
               </button>
             ))}
           </div>
-        </div>
+        </div> */}
 
         {/* Products Grid */}
         <ScrollArea className="flex-1 p-6">
@@ -677,19 +707,36 @@ export default function CreateSales() {
                     <div className="flex justify-between mb-2">
                       <div className="flex-1 pr-2">
                         <p className="text-xs font-bold text-slate-800 line-clamp-1">{item.product.name}</p>
-                        <p className="text-[10px] text-gray-500 mt-0.5">
-                          {formatCurrency(item.unit_price)} / {(item as any).unit_info?.abbrev || 'pc'}
-                        </p>
+                        <div className="flex items-center text-[10px] text-gray-500 mt-0.5">
+                          <span>₦</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={item.unit_price}
+                            onChange={(e) => handleUpdatePrice(index, parseFloat(e.target.value) || 0)}
+                            className="w-16 bg-transparent border-b border-slate-300 focus:border-blue-500 outline-none mx-1 text-xs p-0"
+                            onClick={(e) => e.stopPropagation()}
+                          />
+                          <span>/ {(item as any).unit_info?.abbrev || 'pc'}</span>
+                        </div>
                       </div>
                       <span className="text-xs font-black text-slate-900">{formatCurrency(item.total_price)}</span>
                     </div>
                     <div className="flex items-center justify-between pl-1">
-                      <div className="flex items-center bg-white rounded-lg border border-slate-200 h-8">
-                        <button className="px-2 h-full text-slate-400 hover:text-slate-600" onClick={() => updateQuantity(index, Math.max(0, item.quantity - 1))}>
+                      <div className="flex items-center bg-white rounded-lg border border-slate-200 h-8 w-24">
+                        <button className="px-2 h-full text-slate-400 hover:text-slate-600 flex-shrink-0" onClick={() => updateQuantity(index, Math.max(0, item.quantity - 1))}>
                           <Minus className="w-3 h-3" />
                         </button>
-                        <span className="w-8 text-center text-xs font-bold text-slate-700">{item.quantity}</span>
-                        <button className="px-2 h-full text-slate-400 hover:text-slate-600" onClick={() => updateQuantity(index, item.quantity + 1)}>
+                        <input
+                          type="number"
+                          step="any"
+                          min="0"
+                          value={item.quantity}
+                          onChange={(e) => updateQuantity(index, parseFloat(e.target.value) || 0)}
+                          className="flex-1 w-full text-center text-xs font-bold text-slate-700 bg-transparent outline-none appearance-none p-0"
+                          onClick={(e) => (e.target as HTMLInputElement).select()}
+                        />
+                        <button className="px-2 h-full text-slate-400 hover:text-slate-600 flex-shrink-0" onClick={() => updateQuantity(index, item.quantity + 1)}>
                           <Plus className="w-3 h-3" />
                         </button>
                       </div>
@@ -802,7 +849,7 @@ export default function CreateSales() {
                       amount: p.amount,
                     }))
                   } as any)}
-                  disabled={isLoading || payments.reduce((s, p) => s + p.amount, 0) < getTotal()}
+                  disabled={isLoading}
                 >
                   {isLoading ? <Loader2 className="animate-spin" /> : 'Complete Sale'}
                 </Button>
@@ -833,6 +880,7 @@ export default function CreateSales() {
             quantity: item.quantity,
             unit_price: item.unit_price,
             total_price: item.total_price,
+            unit_abbrev: (item as any).unit_info?.abbrev || 'pc',
           }))}
         />
       )}

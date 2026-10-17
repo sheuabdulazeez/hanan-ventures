@@ -46,18 +46,18 @@ export async function getProfitByDateRange(startDate: string, endDate: string): 
       grossProfit: number;
     }>(`
       SELECT 
-        COALESCE(SUM(total_amount), 0) as totalRevenue,
-        COALESCE(SUM(total_cost), 0) as totalCost,
-        COALESCE(SUM(gross_profit), 0) as grossProfit
+        COALESCE(SUM(total_amount - returned_amount), 0) as totalRevenue,
+        COALESCE(SUM(total_cost - returned_cost), 0) as totalCost,
+        COALESCE(SUM(gross_profit - returned_amount + returned_cost), 0) as grossProfit
       FROM sales 
-      WHERE DATE(sale_date) BETWEEN $1 AND $2
+      WHERE DATE(created_at, 'localtime') BETWEEN $1 AND $2
     `, [startDate, endDate]);
 
     // Get expenses for the same period
     const expensesResult = await db.selectOne<{ totalExpenses: number }>(`
       SELECT COALESCE(SUM(amount), 0) as totalExpenses
       FROM business_expenses 
-      WHERE DATE(expense_date) BETWEEN $1 AND $2
+      WHERE DATE(CASE WHEN length(expense_date) > 10 THEN datetime(expense_date, 'localtime') ELSE expense_date END) BETWEEN $1 AND $2
     `, [startDate, endDate]);
 
     const salesData = salesResult || { totalRevenue: 0, totalCost: 0, grossProfit: 0 };
@@ -82,7 +82,7 @@ export async function getProfitByDateRange(startDate: string, endDate: string): 
 
 // Get today's profit
 export async function getTodayProfit(): Promise<ProfitData> {
-  const today = new Date().toISOString().split('T')[0];
+  const today = formatDateLocal(new Date());
   return getProfitByDateRange(today, today);
 }
 
@@ -123,36 +123,43 @@ export async function getDailyProfitBreakdown(startDate: string, endDate: string
   const db = await initDatabase();
 
   try {
+    // Driven by the union of sale days and expense days, so expenses on days with
+    // no sales still reduce profit (otherwise daily rows don't add up to the period).
     return await db.select<ProfitByPeriod[]>(`
       WITH daily_sales AS (
         SELECT 
-          DATE(created_at) as date,
-          SUM(total_amount) as revenue,
-          SUM(total_cost) as cost,
-          SUM(gross_profit) as grossProfit
+          DATE(created_at, 'localtime') as date,
+          SUM(total_amount - returned_amount) as revenue,
+          SUM(total_cost - returned_cost) as cost,
+          SUM(gross_profit - returned_amount + returned_cost) as grossProfit
         FROM sales
-        WHERE DATE(created_at) BETWEEN $1 AND $2
-        GROUP BY DATE(created_at)
+        WHERE DATE(created_at, 'localtime') BETWEEN $1 AND $2
+        GROUP BY DATE(created_at, 'localtime')
       ),
       daily_expenses AS (
         SELECT 
-          DATE(expense_date) as date,
+          DATE(CASE WHEN length(expense_date) > 10 THEN datetime(expense_date, 'localtime') ELSE expense_date END) as date,
           SUM(amount) as expenses
         FROM business_expenses
-        WHERE DATE(expense_date) BETWEEN $1 AND $2
-        GROUP BY DATE(expense_date)
+        WHERE DATE(CASE WHEN length(expense_date) > 10 THEN datetime(expense_date, 'localtime') ELSE expense_date END) BETWEEN $1 AND $2
+        GROUP BY DATE(CASE WHEN length(expense_date) > 10 THEN datetime(expense_date, 'localtime') ELSE expense_date END)
+      ),
+      all_days AS (
+        SELECT date FROM daily_sales
+        UNION
+        SELECT date FROM daily_expenses
       )
       SELECT 
-        ds.date,
-        ds.revenue,
-        ds.cost,
-        ds.grossProfit,
+        d.date,
+        COALESCE(ds.revenue, 0) as revenue,
+        COALESCE(ds.cost, 0) as cost,
+        COALESCE(ds.grossProfit, 0) as grossProfit,
         COALESCE(de.expenses, 0) as expenses,
-        ds.grossProfit - COALESCE(de.expenses, 0) as netProfit
-      FROM daily_sales ds
-      LEFT JOIN daily_expenses de ON de.date = ds.date
-      WHERE ds.revenue > 0
-      ORDER BY ds.date
+        COALESCE(ds.grossProfit, 0) - COALESCE(de.expenses, 0) as netProfit
+      FROM all_days d
+      LEFT JOIN daily_sales ds ON ds.date = d.date
+      LEFT JOIN daily_expenses de ON de.date = d.date
+      ORDER BY d.date
     `, [startDate, endDate]);
   } catch (error) {
     console.error('Error fetching daily profit breakdown:', error);
@@ -168,21 +175,21 @@ export async function getProductProfitability(startDate: string, endDate: string
     return await db.select<ProductProfitability[]>(`
       SELECT 
         p.name as productName,
-        COALESCE(SUM(si.total_price), 0) as totalRevenue,
-        COALESCE(SUM(si.cost_price_at_sale * si.quantity), 0) as totalCost,
-        COALESCE(SUM(si.profit), 0) as grossProfit,
+        COALESCE(SUM(si.total_price * (si.quantity - si.returned_quantity) / si.quantity), 0) as totalRevenue,
+        COALESCE(SUM(si.cost_price_at_sale * COALESCE(si.base_quantity, si.quantity) * (si.quantity - si.returned_quantity) / si.quantity), 0) as totalCost,
+        COALESCE(SUM(si.profit * (si.quantity - si.returned_quantity) / si.quantity), 0) as grossProfit,
         CASE 
-          WHEN SUM(si.total_price) > 0 
-          THEN (CAST(SUM(si.profit) AS REAL) / SUM(si.total_price)) * 100 
+          WHEN SUM(si.total_price * (si.quantity - si.returned_quantity) / si.quantity) > 0 
+          THEN (CAST(SUM(si.profit * (si.quantity - si.returned_quantity) / si.quantity) AS REAL) / SUM(si.total_price * (si.quantity - si.returned_quantity) / si.quantity)) * 100 
           ELSE 0 
         END as profitMargin,
-        COALESCE(SUM(si.quantity), 0) as quantitySold
+        COALESCE(SUM(si.quantity - si.returned_quantity), 0) as quantitySold
       FROM products p
       LEFT JOIN sale_items si ON p.id = si.product_id
       LEFT JOIN sales s ON si.sale_id = s.id
-      WHERE DATE(s.created_at) BETWEEN $1 AND $2
+      WHERE DATE(s.created_at, 'localtime') BETWEEN $1 AND $2
       GROUP BY p.id, p.name
-      HAVING SUM(si.quantity) > 0
+      HAVING SUM(si.quantity - si.returned_quantity) > 0
       ORDER BY grossProfit DESC
     `, [startDate, endDate]);
   } catch (error) {

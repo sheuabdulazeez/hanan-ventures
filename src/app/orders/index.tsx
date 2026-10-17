@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -20,10 +20,14 @@ import {
   Calendar,
   CheckCircle,
   Loader2,
-  Printer
+  Printer,
+  Wallet
 } from "lucide-react";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { generatePOHtml } from "@/lib/po-print-utils";
+import { pdf } from "@react-pdf/renderer";
+import { invoke } from "@tauri-apps/api/core";
+import PurchaseOrderPDF from "@/components/pdf/PurchaseOrderPDF";
+import SupplierPaymentDialog from "./SupplierPaymentDialog";
+import Payments from "./Payments";
 import {
   Card,
   CardContent,
@@ -66,19 +70,18 @@ import {
   getPurchaseOrderById,
   PurchaseOrder,
 } from "@/database/orders";
+import { getSupplierPayableByPurchaseOrder } from "@/database/supplier-payments";
 import { getSuppliers, Supplier } from "@/database/suppliers";
 import { getProducts } from "@/database/products";
-import { TProduct } from "@/types/database";
+import { TProduct, TPurchaseOrderPayableSummary } from "@/types/database";
 import { toast } from "@/hooks/use-toast";
 import { useAppStore } from "@/lib/store";
 import ReceivePO from "./Receive";
 import Approvals from "./Approvals";
 
 export default function PurchaseOrdersPage() {
-  const { auth: { user }, businessInfo, systemSettings } = useAppStore();
+  const { auth: { user }, businessInfo, receiptSettings } = useAppStore();
   const isAdmin = user?.role === 'super_admin' || user?.role === 'admin' || user?.role === 'manager';
-
-  const printWindow = useRef<WebviewWindow | null>(null);
 
   const [activeTab, setActiveTab] = useState("all-orders");
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -91,7 +94,7 @@ export default function PurchaseOrdersPage() {
   const [isCreating, setIsCreating] = useState(false);
   const [newPO, setNewPO] = useState<{
     supplier_id: string;
-    items: { product_id: string; quantity_ordered: number; unit_id?: string }[];
+    items: { product_id: string; quantity_ordered: number; unit_id?: string; unit_price: number | "" }[];
   }>({
     supplier_id: "",
     items: [],
@@ -99,6 +102,8 @@ export default function PurchaseOrdersPage() {
 
   // View Modal State
   const [selectedPO, setSelectedPO] = useState<PurchaseOrder | null>(null);
+  const [selectedPOSummary, setSelectedPOSummary] = useState<TPurchaseOrderPayableSummary | null>(null);
+  const [showPaymentDialog, setShowPaymentDialog] = useState(false);
 
   useEffect(() => {
     loadInitialData();
@@ -139,27 +144,32 @@ export default function PurchaseOrdersPage() {
         return;
       }
 
+      // The price is what this supplier is charging for this order, which can
+      // differ from the product's stored cost price, so it is entered per line.
+      const invalidLine = newPO.items.findIndex(
+        (item) =>
+          !item.product_id ||
+          !(item.quantity_ordered > 0) ||
+          !(Number(item.unit_price) > 0)
+      );
+      if (invalidLine !== -1) {
+        toast({
+          variant: "destructive",
+          title: "Check order items",
+          description: `Item ${invalidLine + 1} needs a product, a quantity and a price greater than zero.`,
+        });
+        return;
+      }
+
       await createPurchaseOrder(
         newPO.supplier_id,
         user.id,
-        newPO.items.map((item) => {
-          const product = products.find((p) => p.id === item.product_id);
-          let price = product?.cost_price || 0;
-
-          if (item.unit_id && product?.product_units) {
-            const unit = product.product_units.find(u => u.id === item.unit_id);
-            if (unit) {
-              price = price * unit.conversion_to_base;
-            }
-          }
-
-          return {
-            productId: item.product_id,
-            quantity: item.quantity_ordered,
-            unitPrice: price,
-            unitId: item.unit_id
-          };
-        })
+        newPO.items.map((item) => ({
+          productId: item.product_id,
+          quantity: item.quantity_ordered,
+          unitPrice: Number(item.unit_price),
+          unitId: item.unit_id || undefined,
+        }))
       );
 
       setIsCreating(false);
@@ -185,7 +195,7 @@ export default function PurchaseOrdersPage() {
       ...prev,
       items: [
         ...prev.items,
-        { product_id: "", quantity_ordered: 1, unit_id: "" },
+        { product_id: "", quantity_ordered: 1, unit_id: "", unit_price: "" },
       ],
     }));
   };
@@ -202,10 +212,8 @@ export default function PurchaseOrdersPage() {
       const newItems = [...prev.items];
       newItems[index] = { ...newItems[index], [field]: value };
       if (field === "product_id") {
-        const product = products.find((p) => p.id === value);
-        if (product) {
-          // unit_price removed to fix type error
-        }
+        // A different product has different units; clear the stale unit choice.
+        newItems[index].unit_id = "";
       }
       return { ...prev, items: newItems };
     });
@@ -213,8 +221,29 @@ export default function PurchaseOrdersPage() {
 
   const handleViewPO = async (id: string) => {
     try {
-      const po = await getPurchaseOrderById(id);
+      const [po, payableSummary] = await Promise.all([
+        getPurchaseOrderById(id),
+        getSupplierPayableByPurchaseOrder(id),
+      ]);
       setSelectedPO(po as unknown as PurchaseOrder);
+      setSelectedPOSummary(payableSummary);
+    } catch (error) {
+      console.error(error);
+    }
+  };
+
+  const refreshSelectedPO = async () => {
+    if (!selectedPO?.id) {
+      return;
+    }
+
+    try {
+      const [po, payableSummary] = await Promise.all([
+        getPurchaseOrderById(selectedPO.id),
+        getSupplierPayableByPurchaseOrder(selectedPO.id),
+      ]);
+      setSelectedPO(po as unknown as PurchaseOrder);
+      setSelectedPOSummary(payableSummary);
     } catch (error) {
       console.error(error);
     }
@@ -259,7 +288,7 @@ export default function PurchaseOrdersPage() {
                     New Order
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="sm:max-w-xl bg-white border-slate-200 p-0 overflow-hidden">
+                <DialogContent className="sm:max-w-3xl bg-white border-slate-200 p-0 overflow-hidden">
                   <DialogHeader className="p-6 bg-slate-50/50 border-b border-slate-100 text-left">
                     <div className="flex items-center gap-3 mb-2">
                       <div className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-slate-900 shadow-sm">
@@ -368,6 +397,23 @@ export default function PurchaseOrdersPage() {
                                   min="1"
                                 />
                               </div>
+                              <div className="w-32">
+                                <Input
+                                  type="number"
+                                  placeholder="Price / unit"
+                                  value={item.unit_price}
+                                  onChange={(e) =>
+                                    updateItem(
+                                      index,
+                                      "unit_price",
+                                      e.target.value === "" ? "" : Math.max(0, parseFloat(e.target.value) || 0)
+                                    )
+                                  }
+                                  className="h-9 bg-white border-slate-200 text-xs font-black text-right"
+                                  min="0"
+                                  step="0.01"
+                                />
+                              </div>
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -385,6 +431,14 @@ export default function PurchaseOrdersPage() {
                           )}
                         </div>
                       </ScrollArea>
+                      <div className="flex items-center justify-between border-t border-slate-100 pt-3">
+                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Order Total (amount owed)</span>
+                        <span className="text-sm font-black text-slate-900">
+                          ₦{newPO.items
+                            .reduce((sum, item) => sum + (item.quantity_ordered || 0) * (Number(item.unit_price) || 0), 0)
+                            .toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
                     </div>
                   </div>
 
@@ -424,6 +478,11 @@ export default function PurchaseOrdersPage() {
                   <Badge variant="secondary" className="ml-2 bg-amber-100 text-amber-700 hover:bg-amber-100 border-none h-4 px-1 text-[8px]">
                     Action Reqd
                   </Badge>
+                </TabsTrigger>
+              )}
+              {isAdmin && (
+                <TabsTrigger value="payments" className="flex-1 min-w-[120px] rounded-lg text-[10px] font-black uppercase tracking-widest data-[state=active]:bg-white data-[state=active]:shadow-sm data-[state=active]:text-slate-900">
+                  <Wallet className="w-3.5 h-3.5 mr-2" /> Payments
                 </TabsTrigger>
               )}
             </TabsList>
@@ -544,13 +603,37 @@ export default function PurchaseOrdersPage() {
               <TabsContent value="approvals">
                 <Approvals onUpdate={loadInitialData} />
               </TabsContent>
+
+              <TabsContent value="payments">
+                <Payments suppliers={suppliers} />
+              </TabsContent>
             </div>
           </Tabs>
         </div>
       </div>
 
+      <SupplierPaymentDialog
+        open={showPaymentDialog}
+        onOpenChange={setShowPaymentDialog}
+        suppliers={suppliers}
+        initialSupplierId={selectedPO?.supplier_id}
+        initialPurchaseOrderId={selectedPO?.id}
+        onSuccess={async () => {
+          await refreshSelectedPO();
+          await loadInitialData();
+        }}
+      />
+
       {/* View PO Details Modal */}
-      <Dialog open={!!selectedPO} onOpenChange={(open) => !open && setSelectedPO(null)}>
+      <Dialog
+        open={!!selectedPO}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedPO(null);
+            setSelectedPOSummary(null);
+          }
+        }}
+      >
         <DialogContent className="sm:max-w-2xl bg-white border-slate-200 p-0 overflow-hidden">
           {selectedPO && (
             <>
@@ -585,6 +668,55 @@ export default function PurchaseOrdersPage() {
                   <div className="space-y-1">
                     <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Total Amounts</p>
                     <p className="text-sm font-black text-green-600">₦{selectedPO?.total_cost?.toLocaleString()}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-2xl border border-slate-200 bg-slate-50/60 p-5">
+                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        Supplier Balance For This PO
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-slate-500">
+                        Liability is created only from approved received stock.
+                      </p>
+                    </div>
+                    {isAdmin && (
+                      <Button
+                        className="bg-slate-900 hover:bg-slate-800 text-white font-black uppercase tracking-widest text-[10px]"
+                        onClick={() => setShowPaymentDialog(true)}
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Record Payment
+                      </Button>
+                    )}
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-3">
+                    <div className="rounded-xl border border-slate-200 bg-white p-4">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        Accrued
+                      </p>
+                      <p className="mt-2 text-xl font-black text-slate-900">
+                        ₦{Number(selectedPOSummary?.total_accrued || 0).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white p-4">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        Paid
+                      </p>
+                      <p className="mt-2 text-xl font-black text-emerald-600">
+                        ₦{Number(selectedPOSummary?.total_paid || 0).toLocaleString()}
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 bg-white p-4">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                        Outstanding
+                      </p>
+                      <p className="mt-2 text-xl font-black text-amber-600">
+                        ₦{Number(selectedPOSummary?.outstanding || 0).toLocaleString()}
+                      </p>
+                    </div>
                   </div>
                 </div>
 
@@ -626,27 +758,54 @@ export default function PurchaseOrdersPage() {
                     onClick={async () => {
                       if (!selectedPO) return;
 
-                      const htmlContent = generatePOHtml(selectedPO, {
-                        businessInfo,
-                        systemSettings
-                      });
-
-                      printWindow.current = new WebviewWindow("print", {
-                        url: "/print.html",
-                        width: 800,
-                        height: 600,
-                        title: `PO #${selectedPO.id}`,
-                      });
-
-                      printWindow.current.once("close", () => {
-                        printWindow.current?.close();
-                        printWindow.current = null;
-                      });
-
-                      printWindow.current.once("loaded", async () => {
-                        await printWindow.current?.emit("print-content", {
-                          html: htmlContent,
+                      if (!receiptSettings.printerPort) {
+                        toast({
+                          variant: "destructive",
+                          title: "No printer selected",
+                          description: "Please select a printer in settings."
                         });
+                        return;
+                      }
+
+                      const doc = (
+                        <PurchaseOrderPDF
+                          po={selectedPO}
+                          settings={{
+                            businessInfo,
+                            receiptSettings
+                          }}
+                        />
+                      );
+
+                      const blob = await pdf(doc).toBlob();
+                      const buffer = await blob.arrayBuffer();
+                      const bytes = Array.from(new Uint8Array(buffer));
+                      const printOptions =
+                        receiptSettings.printTransport === "serial"
+                          ? {
+                              transport: "serial" as const,
+                              serialConfig: {
+                                baud_rate: receiptSettings.serialBaudRate,
+                                timeout_ms: receiptSettings.serialTimeoutMs,
+                                chunk_size: receiptSettings.serialChunkSize,
+                                chunk_delay_ms: receiptSettings.serialChunkDelayMs,
+                                parity: receiptSettings.serialParity,
+                                stop_bits: receiptSettings.serialStopBits,
+                                data_bits: receiptSettings.serialDataBits,
+                                flow_control: receiptSettings.serialFlowControl,
+                              },
+                            }
+                          : {
+                              transport: "spooler" as const,
+                              serialConfig: undefined,
+                            };
+
+                      await invoke("print_pdf", {
+                        printerPort: receiptSettings.printerPort,
+                        pdfBytes: bytes,
+                        paperWidth: receiptSettings.paperSize === "58mm" ? 58 : 80,
+                        transport: printOptions.transport,
+                        serialConfig: printOptions.serialConfig,
                       });
                     }}
                   >

@@ -19,7 +19,7 @@ import {
   SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "./ui/sidebar"
-import { Link } from "react-router"
+import { Link, useLocation } from "react-router"
 import { useAppStore } from "@/lib/store"
 import { UserRole } from "@/types/database"
 
@@ -42,6 +42,12 @@ export function NavMain({
   }[]
 }) {
   const { auth } = useAppStore()
+  const { pathname } = useLocation()
+
+  // "/dashboard" is a prefix of every route, so it only matches exactly;
+  // other items stay active on their sub-routes (e.g. /dashboard/sales/create).
+  const isRouteActive = (url: string) =>
+    url === "/dashboard" ? pathname === url : pathname === url || pathname.startsWith(url + "/")
 
   return (
     <SidebarGroup>
@@ -71,7 +77,7 @@ export function NavMain({
                     <SidebarMenuSub className="ml-4 border-l border-sidebar-border/50">
                       {item.items?.map((subItem) => (
                         <SidebarMenuSubItem key={subItem.title}>
-                          <SidebarMenuSubButton asChild className="hover:text-emerald-600">
+                          <SidebarMenuSubButton asChild isActive={isRouteActive(subItem.url)} className="hover:text-emerald-600 data-[active=true]:bg-emerald-50 data-[active=true]:text-emerald-700 dark:data-[active=true]:bg-emerald-500/15 dark:data-[active=true]:text-emerald-400">
                             <Link to={subItem.url} className="flex items-center gap-2">
                               {subItem.icon && <subItem.icon className="h-3.5 w-3.5" />}
                               <span>{subItem.title}</span>
@@ -85,7 +91,7 @@ export function NavMain({
               </Collapsible>
             ) : (
               <SidebarMenuItem>
-                <SidebarMenuButton asChild tooltip={item.title} className="hover:bg-sidebar-accent/50 data-[active=true]:bg-emerald-50 data-[active=true]:text-emerald-700">
+                <SidebarMenuButton asChild tooltip={item.title} isActive={isRouteActive(item.url)} className="hover:bg-sidebar-accent/50 data-[active=true]:bg-emerald-50 data-[active=true]:text-emerald-700 data-[active=true]:font-semibold dark:data-[active=true]:bg-emerald-500/15 dark:data-[active=true]:text-emerald-400">
                   <Link to={item.url} className="flex items-center gap-2">
                     {item.icon && <item.icon className="h-4 w-4 shrink-0 transition-transform group-hover:scale-110" />}
                     <span className="font-medium">{item.title}</span>

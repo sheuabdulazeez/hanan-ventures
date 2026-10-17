@@ -8,6 +8,9 @@ import { enhancedInvoiceHtml } from "@/lib/utils";
 import { ScrollArea } from "./ui/scroll-area";
 import { useAppStore } from "@/lib/store";
 import { getCustomerDebtSummary } from "@/database/debtors";
+import ReceiptPDF from "./pdf/ReceiptPDF";
+import { PDFViewer } from "@react-pdf/renderer";
+import PrintInvoiceButton from "./PrintInvoiceButton";
 
 interface InvoiceModalProps {
   open: boolean;
@@ -15,7 +18,7 @@ interface InvoiceModalProps {
   sale: Omit<TSale, "updated_at" | "sale_date">;
   items: Pick<
     TSaleItem,
-    "product_name" | "quantity" | "unit_price" | "total_price"
+    "product_name" | "quantity" | "unit_price" | "total_price" | "unit_abbrev"
   >[];
 }
 
@@ -34,7 +37,7 @@ export function InvoiceModal({
   } | null>(null);
 
   useEffect(() => {
-    if (open && sale.customer_id && sale.customer_id !== 'WALK-IN') {
+    if (open && sale.customer_id && sale.customer_id !== "WALK-IN") {
       loadCustomerDebt();
     } else {
       setCustomerDebt(null);
@@ -43,10 +46,14 @@ export function InvoiceModal({
 
   const loadCustomerDebt = async () => {
     try {
-      const debtSummary = await getCustomerDebtSummary(sale.customer_id, sale.total_amount - sale.payments.reduce((acc, cur) => acc + cur.amount, 0));
+      const debtSummary = await getCustomerDebtSummary(
+        sale.customer_id,
+        sale.total_amount -
+          sale.payments.reduce((acc, cur) => acc + cur.amount, 0),
+      );
       setCustomerDebt(debtSummary);
     } catch (error) {
-      console.error('Failed to load customer debt:', error);
+      console.error("Failed to load customer debt:", error);
       setCustomerDebt(null);
     }
   };
@@ -56,11 +63,16 @@ export function InvoiceModal({
     if (!content) return;
 
     // try {
-    const htmlContent = enhancedInvoiceHtml(sale, items, {
-      businessInfo,
-      receiptSettings,
-      systemSettings,
-    }, customerDebt || undefined);
+    const htmlContent = enhancedInvoiceHtml(
+      sale,
+      items,
+      {
+        businessInfo,
+        receiptSettings,
+        systemSettings,
+      },
+      customerDebt || undefined,
+    );
 
     printWindow.current = new WebviewWindow("print", {
       url: "/print.html",
@@ -83,26 +95,25 @@ export function InvoiceModal({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[600px] max-h-screen">
-        <ScrollArea className="h-[90vh]">
-          <div
-            className="p-6"
-            id="invoice-content"
-            dangerouslySetInnerHTML={{
-          __html: enhancedInvoiceHtml(sale, items, {
-            businessInfo,
-            receiptSettings,
-            systemSettings,
-          }, customerDebt || undefined),
-        }}
-          />
+      <DialogContent className="max-w-[600px] max-h-screen overflow-hidden">
+          <PDFViewer className="h-[90vh] w-[500px] bg-transparent">
+            <ReceiptPDF
+              customerDebt={customerDebt}
+              sale={sale}
+              items={items}
+              settings={{
+                businessInfo,
+                receiptSettings,
+                systemSettings,
+              }}
+            />
+          </PDFViewer>
           <div className="flex justify-end pb-4">
-            <Button onClick={handlePrint}>
-              <Printer className="mr-2 h-4 w-4" />
-              Print Invoice
-            </Button>
+            <PrintInvoiceButton 
+              sale={sale as any}
+              items={items as any}
+            />
           </div>
-        </ScrollArea>
       </DialogContent>
     </Dialog>
   );

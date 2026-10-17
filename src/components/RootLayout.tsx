@@ -4,6 +4,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow"
 import { Outlet, useLocation, useNavigate } from 'react-router';
 import { Toaster } from './ui/toaster';
 import { useAppStore } from '@/lib/store';
+import ForceChangePasswordScreen from './ForceChangePasswordScreen';
 // import useAuth from '../hooks/use-auth';
 
 const RootLayout = () => {
@@ -29,6 +30,15 @@ const RootLayout = () => {
   }, [])
 
   if (auth.loading) return (<div className='flex flex-1 text-center justify-center items-center h-dvh text-xl text-blue-500 font-bold'>Loading...</div>)
+
+  if (auth.isAuthenticated && auth.user?.must_change_password) {
+    return (
+      <div>
+        <Toaster />
+        <ForceChangePasswordScreen />
+      </div>
+    );
+  }
 
   return (
     <div>

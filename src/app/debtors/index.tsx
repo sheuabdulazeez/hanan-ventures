@@ -42,8 +42,8 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
-import { getDebtors, getDebtorPayments } from "@/database/debtors";
-import { TDebtor, TDebtorPayment } from "@/types/database";
+import { getDebtors, getDebtorPayments, getCustomerOpenDebts } from "@/database/debtors";
+import { TDebtor, TDebtorPayment, TDebtorSale } from "@/types/database";
 
 import {
   Dialog,
@@ -95,6 +95,7 @@ export default function DebtorsPage() {
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [debtors, setDebtors] = useState<TDebtor[]>([]);
   const [debtorPayments, setDebtorPayments] = useState<TDebtorPayment[]>([]);
+  const [debtorSales, setDebtorSales] = useState<TDebtorSale[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showPaymentDialog, setShowPaymentDialog] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
@@ -130,9 +131,16 @@ export default function DebtorsPage() {
     setSelectedDebtor(debtor);
     setIsDrawerOpen(true);
 
+    setDebtorPayments([]);
+    setDebtorSales([]);
     try {
-      const payments = await getDebtorPayments(debtor.id);
+      // debtor.id is the customer id: debt is aggregated per customer.
+      const [payments, sales] = await Promise.all([
+        getDebtorPayments(debtor.customer_id),
+        getCustomerOpenDebts(debtor.customer_id),
+      ]);
       setDebtorPayments(payments);
+      setDebtorSales(sales);
     } catch (error) {
       console.error("Error fetching debtor payments:", error);
     }
@@ -152,32 +160,35 @@ export default function DebtorsPage() {
       };
 
       await recordDebtPayment({
-        debtor_id: selectedDebtor.id,
+        customer_id: selectedDebtor.customer_id,
         amount_paid: Number(paymentAmount),
         payment_method: paymentMethod,
         bank_name: bankName,
-        payment_date: new Date().toDateString(),
-        employee_id: auth?.user?.id, // Replace with actual logged-in user ID
+        payment_date: new Date().toISOString(),
+        employee_id: auth?.user?.id,
       });
 
-      // Refresh debtors and payments data
-      const [updatedDebtors, updatedPayments] = await Promise.all([
+      // Refresh debtors, payments and the customer's open sales
+      const [updatedDebtors, updatedPayments, updatedSales] = await Promise.all([
         getDebtors(),
-        getDebtorPayments(selectedDebtor.id),
+        getDebtorPayments(selectedDebtor.customer_id),
+        getCustomerOpenDebts(selectedDebtor.customer_id),
       ]);
 
       setDebtors(updatedDebtors);
       setDebtorPayments(updatedPayments);
+      setDebtorSales(updatedSales);
 
-      // Update selected debtor with new amount
-      const updatedDebtor = updatedDebtors.find(d => d.id === selectedDebtor.id);
-      if (updatedDebtor) {
-        setSelectedDebtor(updatedDebtor);
-        setLastPayment({
-          ...paymentDetails,
-          debtor: updatedDebtor,
-        });
-      }
+      // A customer who just cleared their debt drops out of the list, so fall
+      // back to a zero balance instead of losing the receipt.
+      const updatedDebtor =
+        updatedDebtors.find(d => d.customer_id === selectedDebtor.customer_id) ||
+        { ...selectedDebtor, amount_owed: 0 };
+      setSelectedDebtor(updatedDebtor);
+      setLastPayment({
+        ...paymentDetails,
+        debtor: updatedDebtor,
+      });
 
       // Don't close dialog immediately - show success state with print option
       setPaymentAmount("");
@@ -192,7 +203,7 @@ export default function DebtorsPage() {
       console.error("Error recording payment:", error);
       toast({
         title: "Error",
-        description: "Failed to record payment. Please try again.",
+        description: error instanceof Error ? error.message : "Failed to record payment. Please try again.",
         variant: "destructive",
       });
     }
@@ -751,6 +762,45 @@ export default function DebtorsPage() {
                       <Plus className="w-4 h-4 mr-2" />
                       Record Payment
                     </Button>
+
+                    {/* Open credit sales */}
+                    <Card className="border border-slate-200 bg-white overflow-hidden shadow-sm">
+                      <CardHeader className="bg-slate-50 p-4 border-b border-slate-200">
+                        <CardTitle className="flex items-center text-[10px] font-black uppercase tracking-widest text-slate-900">
+                          <CreditCard className="w-3.5 h-3.5 mr-2 text-slate-400" />
+                          Credit Sales ({debtorSales.length})
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="p-0">
+                        {debtorSales.length > 0 ? (
+                          <Table>
+                            <TableHeader>
+                              <TableRow className="bg-slate-50/50 border-b border-slate-100">
+                                <TableHead className="text-[9px] font-black uppercase text-slate-400 h-10 px-4">Sale</TableHead>
+                                <TableHead className="text-[9px] font-black uppercase text-slate-400 h-10">On credit</TableHead>
+                                <TableHead className="text-[9px] font-black uppercase text-slate-400 h-10">Balance</TableHead>
+                                <TableHead className="text-[9px] font-black uppercase text-slate-400 h-10 px-4 text-right">Due</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {debtorSales.map((sale) => (
+                                <TableRow key={sale.id} className="border-b border-slate-50 hover:bg-slate-50/50">
+                                  <TableCell className="text-xs font-bold text-slate-700 px-4">
+                                    <div>#{sale.sale_id.substring(0, 8)}</div>
+                                    <div className="text-[10px] text-slate-400 font-medium">{format(new Date(sale.sale_date.replace(" ", "T") + "Z"), "MMM dd, yyyy")}</div>
+                                  </TableCell>
+                                  <TableCell className="text-xs font-bold text-slate-500">₦{sale.original_amount.toLocaleString()}</TableCell>
+                                  <TableCell className="text-xs font-black text-red-600">₦{sale.amount_owed.toLocaleString()}</TableCell>
+                                  <TableCell className="text-xs font-bold text-slate-500 px-4 text-right">{sale.due_date ? format(new Date(sale.due_date.replace(" ", "T") + "Z"), "MMM dd") : "-"}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        ) : (
+                          <div className="p-6 text-center text-xs font-black uppercase tracking-widest text-slate-300">No open credit sales</div>
+                        )}
+                      </CardContent>
+                    </Card>
 
                     {/* Payment History */}
                     <Card className="border border-slate-200 bg-white overflow-hidden shadow-sm">

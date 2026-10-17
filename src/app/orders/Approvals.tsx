@@ -3,6 +3,7 @@ import { getPendingReceipts, approveReceipt, PurchaseReceipt, PurchaseReceiptIte
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { toast } from "@/hooks/use-toast";
+import { useAppStore } from "@/lib/store";
 import { Loader2, CheckCircle2, ClipboardCheck } from "lucide-react";
 
 // Extended type for display
@@ -14,6 +15,7 @@ interface ExtendedReceipt extends PurchaseReceipt {
 }
 
 export default function Approvals({ onUpdate }: { onUpdate?: () => void }) {
+    const { auth: { user } } = useAppStore();
     const [loading, setLoading] = useState(false);
     const [processingId, setProcessingId] = useState<string | null>(null);
     const [receipts, setReceipts] = useState<ExtendedReceipt[]>([]);
@@ -38,13 +40,14 @@ export default function Approvals({ onUpdate }: { onUpdate?: () => void }) {
     const handleApprove = async (id: string) => {
         setProcessingId(id);
         try {
-            await approveReceipt(id);
+            if (!user) throw new Error("You must be logged in to approve.");
+            await approveReceipt(id, user.id);
             toast({ title: "Approved", description: "Inventory has been updated." });
             loadReceipts();
             if (onUpdate) onUpdate();
         } catch (e) {
             console.error(e);
-            toast({ title: "Failed", description: "Could not approve receipt.", variant: "destructive" });
+            toast({ title: "Failed", description: e instanceof Error ? e.message : "Could not approve receipt.", variant: "destructive" });
         } finally {
             setProcessingId(null);
         }

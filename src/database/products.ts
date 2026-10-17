@@ -154,19 +154,30 @@ export async function updateProductUnits(
 }
 
 export async function updateProductQuantity(id: string, quantity: number, adjustmentType: InventoryAdjustmentType, reason: string) {
+  if (!(quantity > 0)) {
+    throw new Error("Adjustment quantity must be greater than zero.");
+  }
   const db = await initDatabase();
-  console.log(quantity, adjustmentType, reason);
   try {
     await db.beginTransaction();
 
-    // Update product quantity
-    await db.executeQuery(
-      `UPDATE products 
+    // Update product quantity. For a decrease, the WHERE clause also acts as a
+    // floor check: it only applies if enough stock is on hand, so we can tell
+    // an insufficient-stock decrease apart from a no-op via rowsAffected.
+    const isDecrease = adjustmentType !== InventoryAdjustmentType.INCREASE;
+    const updateResult = await db.executeQuery(
+      `UPDATE products
          SET quantity_on_hand = quantity_on_hand + $1,
              updated_at = CURRENT_TIMESTAMP
-         WHERE id = $2`,
-      [adjustmentType === InventoryAdjustmentType.INCREASE ? quantity : -quantity, id]
+         WHERE id = $2 ${isDecrease ? "AND quantity_on_hand >= $3" : ""}`,
+      isDecrease
+        ? [-quantity, id, quantity]
+        : [quantity, id]
     );
+
+    if (!updateResult.rowsAffected) {
+      throw new Error("Cannot decrease stock below zero. Check the current quantity on hand.");
+    }
 
     // Log the quantity adjustment
     await db.executeQuery(
@@ -206,7 +217,7 @@ export async function updateStock(id: string, quantity: number) {
 export async function getProductsByCategory(category: string) {
   const db = await initDatabase();
   const result = await db.select<TProduct[]>(
-    'SELECT * FROM products WHERE category = $1 ORDER BY product_name ASC',
+    'SELECT * FROM products WHERE category = $1 ORDER BY name ASC',
     [category]
   );
   return result;
@@ -216,7 +227,7 @@ export async function searchProducts(query: string) {
   const db = await initDatabase();
   const searchTerm = `%${query}%`;
   const result = await db.select<TProduct[]>(
-    'SELECT * FROM products WHERE product_name LIKE $1 OR description LIKE $1 OR category LIKE $1',
+    'SELECT * FROM products WHERE name LIKE $1 OR description LIKE $1 OR category LIKE $1',
     [searchTerm]
   );
   return result;
@@ -349,14 +360,14 @@ export async function getProductAnalytics(productId: string) {
   const salesData = await db.selectOne(
     `SELECT 
        COUNT(DISTINCT si.sale_id) as totalTransactions,
-       SUM(si.quantity) as totalSales,
-       SUM(si.total_price) as totalRevenue,
+       SUM(si.quantity - si.returned_quantity) as totalSales,
+       SUM(si.total_price * (si.quantity - si.returned_quantity) / si.quantity) as totalRevenue,
        AVG(si.unit_price) as avgSellingPrice,
        MIN(si.unit_price) as minSellingPrice,
        MAX(si.unit_price) as maxSellingPrice,
-       ((SUM(si.profit) / SUM(si.total_price)) * 100) as profitMargin,
-       (SUM(si.profit) / SUM(si.quantity)) as avgProfitPerSale,
-       SUM(si.profit) as totalProfit
+       ((SUM(si.profit * (si.quantity - si.returned_quantity) / si.quantity) / SUM(si.total_price * (si.quantity - si.returned_quantity) / si.quantity)) * 100) as profitMargin,
+       (SUM(si.profit * (si.quantity - si.returned_quantity) / si.quantity) / SUM(si.quantity - si.returned_quantity)) as avgProfitPerSale,
+       SUM(si.profit * (si.quantity - si.returned_quantity) / si.quantity) as totalProfit
      FROM sale_items si
      WHERE si.product_id = $1`,
     [productId]
@@ -368,9 +379,9 @@ export async function getProductAnalytics(productId: string) {
   const monthlySales = await db.select(
     `SELECT 
        strftime('%Y-%m', s.sale_date) as month,
-       SUM(si.quantity) as quantity_sold,
-       SUM(si.total_price) as revenue,
-       SUM(si.profit) as profit
+       SUM(si.quantity - si.returned_quantity) as quantity_sold,
+       SUM(si.total_price * (si.quantity - si.returned_quantity) / si.quantity) as revenue,
+       SUM(si.profit * (si.quantity - si.returned_quantity) / si.quantity) as profit
      FROM sale_items si
      JOIN sales s ON si.sale_id = s.id
      WHERE si.product_id = $1

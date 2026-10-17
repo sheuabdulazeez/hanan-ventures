@@ -1,4 +1,5 @@
 import { getAdminSettings } from '@/database/settings'
+import { getActiveSession, logoutSession } from '@/database/user'
 import { TSale, TUser } from '@/types/database'
 import { LazyStore } from '@tauri-apps/plugin-store'
 import { create } from 'zustand'
@@ -20,7 +21,17 @@ interface AppState {
   };
   receiptSettings: {
     paperSize: '80mm' | '58mm';
+    printerPort: string;
     printerName: string;
+    printTransport: 'spooler' | 'serial';
+    serialBaudRate: number;
+    serialTimeoutMs: number;
+    serialChunkSize: number;
+    serialChunkDelayMs: number;
+    serialParity: 'none' | 'odd' | 'even';
+    serialStopBits: 1 | 2;
+    serialDataBits: 5 | 6 | 7 | 8;
+    serialFlowControl: 'none' | 'software' | 'hardware';
     footerText: string,
   };
   systemSettings: {
@@ -65,7 +76,17 @@ export const useAppStore = create<AppState>((set) => ({
   },
   receiptSettings: {
     paperSize: "80mm",
+    printerPort: "",
     printerName: "",
+    printTransport: "spooler",
+    serialBaudRate: 9600,
+    serialTimeoutMs: 2000,
+    serialChunkSize: 1024,
+    serialChunkDelayMs: 5,
+    serialParity: "none",
+    serialStopBits: 1,
+    serialDataBits: 8,
+    serialFlowControl: "none",
     footerText: '',
   },
   systemSettings: {
@@ -87,6 +108,7 @@ export const useAppStore = create<AppState>((set) => ({
         isAuthenticated: !!user,
       },
     }))
+    // Only a display copy: the backend session is what authorizes anything.
     await store.set('user', user)
   },
   setLoading: (loading) => {
@@ -98,6 +120,7 @@ export const useAppStore = create<AppState>((set) => ({
     }))
   },
   logout: async () => {
+    await logoutSession()
     await store.delete('user')
     set((state) => ({
       auth: {
@@ -141,7 +164,17 @@ export const useAppStore = create<AppState>((set) => ({
     useAppStore.getState().setReceiptSettings({
       footerText: settings.receipt_footer,
       paperSize: (settings.printer_paper_size as '80mm' | '58mm') || '80mm',
-      printerName: settings.printer_name,
+      printerPort: settings.printer_port || "",
+      printerName: settings.printer_name || "",
+      printTransport: (settings.printer_transport as 'spooler' | 'serial') || "spooler",
+      serialBaudRate: Number(settings.serial_baud_rate || 9600),
+      serialTimeoutMs: Number(settings.serial_timeout_ms || 2000),
+      serialChunkSize: Number(settings.serial_chunk_size || 1024),
+      serialChunkDelayMs: Number(settings.serial_chunk_delay_ms || 5),
+      serialParity: (settings.serial_parity as 'none' | 'odd' | 'even') || "none",
+      serialStopBits: (Number(settings.serial_stop_bits || 1) as 1 | 2),
+      serialDataBits: (Number(settings.serial_data_bits || 8) as 5 | 6 | 7 | 8),
+      serialFlowControl: (settings.serial_flow_control as 'none' | 'software' | 'hardware') || "none",
     });
     useAppStore.getState().setSystemSettings({
       currency: settings.currency,
@@ -194,7 +227,10 @@ export const useAppStore = create<AppState>((set) => ({
 // Initialize store with saved data
 store.init().then(async () => {
   useAppStore.getState().setLoading(true)
-  const savedUser = await store.get('user')
+  // Trust the backend, not the saved copy: after a restart there is no session and
+  // the user must log in again; after a mere UI reload the session is still live.
+  const savedUser = await getActiveSession()
+  if (!savedUser) await store.delete('user')
   const savedActiveSales: ActiveSale[] = await store.get('activeSales')
   if (savedActiveSales?.length) {
     useAppStore.getState().activeSales = savedActiveSales as ActiveSale[]
@@ -213,7 +249,6 @@ store.init().then(async () => {
     useAppStore.getState().setUser(savedUser as TUser)
   }
   const settings = await getAdminSettings();
-  console.log(settings)
   useAppStore.getState().setBusinessInfo({
     name: settings.name,
     address: settings.address,
@@ -228,7 +263,17 @@ store.init().then(async () => {
   useAppStore.getState().setReceiptSettings({
     footerText: settings.receipt_footer,
     paperSize: (settings.printer_paper_size as '80mm' | '58mm') || '80mm',
-    printerName: settings.printer_port,
+    printerPort: settings.printer_port || "",
+    printerName: settings.printer_name || "",
+    printTransport: (settings.printer_transport as 'spooler' | 'serial') || "spooler",
+    serialBaudRate: Number(settings.serial_baud_rate || 9600),
+    serialTimeoutMs: Number(settings.serial_timeout_ms || 2000),
+    serialChunkSize: Number(settings.serial_chunk_size || 1024),
+    serialChunkDelayMs: Number(settings.serial_chunk_delay_ms || 5),
+    serialParity: (settings.serial_parity as 'none' | 'odd' | 'even') || "none",
+    serialStopBits: (Number(settings.serial_stop_bits || 1) as 1 | 2),
+    serialDataBits: (Number(settings.serial_data_bits || 8) as 5 | 6 | 7 | 8),
+    serialFlowControl: (settings.serial_flow_control as 'none' | 'software' | 'hardware') || "none",
   });
   useAppStore.getState().setSystemSettings({
     currency: settings.currency,

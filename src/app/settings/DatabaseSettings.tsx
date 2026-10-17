@@ -1,94 +1,104 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import {
     Database,
-    Server,
     HardDrive,
-    Save,
-    RotateCcw,
+    Download,
     CheckCircle2,
     AlertCircle,
-    Wifi,
-    WifiOff,
     ShieldAlert
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { invoke } from "@tauri-apps/api/core";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Separator } from "@/components/ui/separator";
+import { Input } from "@/components/ui/input";
+import { useAppStore } from "@/lib/store";
 import { useNavigate } from "react-router";
+import { toast } from "@/hooks/use-toast";
+import { RotateCcw } from "lucide-react";
 
-type DbType = "postgres" | "mysql" | "sqlite";
+interface DatabaseInfo {
+    path: string;
+    size_bytes: number;
+}
 
-interface DatabaseConfig {
-    type: DbType;
-    host?: string;
-    port?: string;
-    username?: string;
-    password?: string;
-    database?: string;
-    isRemote: boolean;
+interface BackupFile {
+    name: string;
+    size_bytes: number;
+    modified_secs: number;
+}
+
+interface BackupInfo {
+    dir: string;
+    is_default_dir: boolean;
+    keep: number;
+    files: BackupFile[];
+}
+
+function formatBytes(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`;
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
 }
 
 export default function DatabaseSettings() {
     const navigate = useNavigate();
-    const [loading, setLoading] = useState(false);
-    const [testing, setTesting] = useState(false);
-    const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+    const [dbInfo, setDbInfo] = useState<DatabaseInfo | null>(null);
+    const [loadError, setLoadError] = useState("");
+    const [backingUp, setBackingUp] = useState(false);
+    const [lastBackupPath, setLastBackupPath] = useState<string | null>(null);
+    const { auth: { user } } = useAppStore();
+    const isSuperAdmin = user?.role === "super_admin";
+    const [backupInfo, setBackupInfo] = useState<BackupInfo | null>(null);
+    const [backupDirInput, setBackupDirInput] = useState("");
+    const [savingDir, setSavingDir] = useState(false);
 
-    // Default config
-    const [config, setConfig] = useState<DatabaseConfig>({
-        type: "sqlite",
-        isRemote: false,
-        host: "localhost",
-        port: "5432",
-        username: "postgres",
-        database: "hanan_ventures",
-        password: ""
-    });
+    const loadBackupInfo = () =>
+        invoke<BackupInfo>("get_backup_info")
+            .then((info) => {
+                setBackupInfo(info);
+                setBackupDirInput(info.is_default_dir ? "" : info.dir);
+            })
+            .catch(() => setBackupInfo(null));
 
     useEffect(() => {
-        // Load config from localStorage (simulating persistence)
-        const storedConfig = localStorage.getItem("db_config");
-        if (storedConfig) {
-            try {
-                setConfig(JSON.parse(storedConfig));
-            } catch (e) {
-                console.error("Failed to parse stored config", e);
-            }
-        }
+        invoke<DatabaseInfo>("get_database_info")
+            .then(setDbInfo)
+            .catch((err) => setLoadError(String(err)));
+        loadBackupInfo();
     }, []);
 
-    const handleSave = () => {
-        setLoading(true);
-        // Simulate save delay
-        setTimeout(() => {
-            localStorage.setItem("db_config", JSON.stringify(config));
-            setLoading(false);
-            // In a real implementation, this would trigger a backend reload/reconnection
-            alert("Configuration saved. Application would restart to apply changes.");
-        }, 1500);
+    const handleSaveBackupDir = async () => {
+        setSavingDir(true);
+        try {
+            await invoke("set_backup_dir", { path: backupDirInput });
+            toast({ title: "Backup folder saved" });
+            await loadBackupInfo();
+        } catch (err: any) {
+            toast({ variant: "destructive", title: "Could not use that folder", description: String(err?.message || err) });
+        } finally {
+            setSavingDir(false);
+        }
     };
 
-    const handleTestConnection = () => {
-        setTesting(true);
-        setTestResult(null);
-
-        // Simulate connection test
-        setTimeout(() => {
-            setTesting(false);
-            // Mock result based on basic validation
-            if (config.isRemote && (!config.host || !config.username)) {
-                setTestResult({ success: false, message: "Host and Username are required for remote connections." });
-            } else {
-                setTestResult({ success: true, message: "Connection successful! (Simulated)" });
-            }
-        }, 2000);
+    const handleBackup = async () => {
+        setBackingUp(true);
+        setLastBackupPath(null);
+        try {
+            const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+            const filename = `hanan-ventures-backup-${timestamp}.db`;
+            const path = await invoke<string>("backup_database", { filename });
+            setLastBackupPath(path);
+            toast({ title: "Backup created", description: path });
+        } catch (err: any) {
+            toast({
+                variant: "destructive",
+                title: "Backup failed",
+                description: String(err?.message || err),
+            });
+        } finally {
+            setBackingUp(false);
+        }
     };
 
     return (
@@ -106,8 +116,8 @@ export default function DatabaseSettings() {
                             <RotateCcw className="w-4 h-4" />
                         </Button>
                         <div>
-                            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">System Configuration</h1>
-                            <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">Database Connection & Network Settings</p>
+                            <h1 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Database</h1>
+                            <p className="text-slate-500 font-bold uppercase tracking-widest text-[10px]">Storage location & backups</p>
                         </div>
                     </div>
                 </div>
@@ -122,23 +132,25 @@ export default function DatabaseSettings() {
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-3 text-sm font-black uppercase tracking-widest">
                                     <ShieldAlert className="w-4 h-4 text-amber-400" />
-                                    Admin Zone
+                                    Storage
                                 </CardTitle>
                                 <CardDescription className="text-slate-400 text-[10px] font-bold uppercase tracking-widest">
-                                    Advanced Configuration
+                                    Where your data actually lives
                                 </CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <p className="text-xs leading-relaxed text-slate-300">
-                                    Changing these settings affects how this terminal connects to the central data store.
+                                    This app stores all data in a single local SQLite file on this
+                                    device. There is no remote/networked database — each installed
+                                    copy of the app has its own independent data.
                                 </p>
                                 <div className="p-4 bg-slate-800/50 rounded-2xl border border-slate-700/50">
                                     <div className="flex items-center gap-2 mb-2">
-                                        <div className={`w-2 h-2 rounded-full ${config.isRemote ? 'bg-blue-400' : 'bg-emerald-400'} animate-pulse`} />
-                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Current Mode</span>
+                                        <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                                        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">Mode</span>
                                     </div>
                                     <p className="text-lg font-black uppercase tracking-tight text-white">
-                                        {config.isRemote ? "Remote Network" : "Local Standalone"}
+                                        Local Standalone
                                     </p>
                                 </div>
                             </CardContent>
@@ -146,183 +158,131 @@ export default function DatabaseSettings() {
 
                         <Alert className="bg-amber-50 border-amber-200 text-amber-900 rounded-2xl">
                             <AlertCircle className="h-4 w-4 text-amber-600" />
-                            <AlertTitle className="text-xs font-black uppercase tracking-widest mb-1">Warning</AlertTitle>
+                            <AlertTitle className="text-xs font-black uppercase tracking-widest mb-1">Back up regularly</AlertTitle>
                             <AlertDescription className="text-[10px] font-medium leading-relaxed opacity-90">
-                                Incorrect database settings will prevent the application from loading sales or inventory data. Ensure you have the correct credentials from your network administrator.
+                                A backup is made automatically once a day and the last {backupInfo?.keep ?? 14} are kept.
+                                Those copies live on this same device, so also copy one to an external
+                                drive or cloud storage now and then: if the device is lost, so is everything on it.
                             </AlertDescription>
                         </Alert>
                     </div>
 
-                    {/* Main Config Form */}
+                    {/* Main panel */}
                     <div className="md:col-span-2 space-y-6">
                         <Card className="bg-white border-slate-200 shadow-sm rounded-3xl overflow-hidden">
                             <CardHeader className="border-b border-slate-100 pb-6">
-                                <div className="flex items-center justify-between">
-                                    <div>
-                                        <CardTitle className="text-lg font-black text-slate-900 uppercase tracking-tight">Connection Settings</CardTitle>
-                                        <CardDescription className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
-                                            Configure data persistence layer
-                                        </CardDescription>
-                                    </div>
-                                    <Badge variant={config.isRemote ? "secondary" : "default"} className="uppercase tracking-widest font-black text-[9px] py-1 px-3">
-                                        {config.isRemote ? <Wifi className="w-3 h-3 mr-1" /> : <HardDrive className="w-3 h-3 mr-1" />}
-                                        {config.isRemote ? "Networked" : "On-Device"}
-                                    </Badge>
-                                </div>
+                                <CardTitle className="text-lg font-black text-slate-900 uppercase tracking-tight">Database File</CardTitle>
+                                <CardDescription className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                                    Local SQLite database
+                                </CardDescription>
                             </CardHeader>
 
-                            <CardContent className="p-8 space-y-8">
-                                {/* Mode Toggle */}
-                                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                    <div className="space-y-1">
-                                        <Label htmlFor="remote-mode" className="text-sm font-black text-slate-900 uppercase tracking-tight">Centralized Database</Label>
-                                        <p className="text-[10px] text-slate-500 font-medium max-w-[250px]">
-                                            Connect to a remote server instead of using the local SQLite file.
-                                        </p>
+                            <CardContent className="p-8 space-y-6">
+                                <div className="p-6 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col items-center justify-center text-center space-y-3">
+                                    <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">
+                                        <HardDrive className="w-6 h-6" />
                                     </div>
-                                    <Switch
-                                        id="remote-mode"
-                                        checked={config.isRemote}
-                                        onCheckedChange={(checked) => setConfig(prev => ({ ...prev, isRemote: checked, type: checked ? 'postgres' : 'sqlite' }))}
-                                    />
-                                </div>
-
-                                {config.isRemote ? (
-                                    <motion.div
-                                        initial={{ opacity: 0, height: 0 }}
-                                        animate={{ opacity: 1, height: "auto" }}
-                                        className="space-y-6"
-                                    >
-                                        <div className="grid grid-cols-2 gap-6">
-                                            <div className="space-y-2">
-                                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Database Type</Label>
-                                                <Select
-                                                    value={config.type}
-                                                    onValueChange={(val: DbType) => setConfig(prev => ({ ...prev, type: val }))}
-                                                >
-                                                    <SelectTrigger className="h-11 rounded-xl bg-slate-50 border-slate-200 font-bold text-sm">
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        <SelectItem value="postgres">PostgreSQL</SelectItem>
-                                                        <SelectItem value="mysql">MySQL / MariaDB</SelectItem>
-                                                    </SelectContent>
-                                                </Select>
-                                            </div>
-
-                                            <div className="space-y-2">
-                                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Port</Label>
-                                                <Input
-                                                    value={config.port}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, port: e.target.value }))}
-                                                    placeholder="5432"
-                                                    className="h-11 rounded-xl bg-slate-50 border-slate-200 font-mono text-sm"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Host / IP Address</Label>
-                                            <div className="relative">
-                                                <Server className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
-                                                <Input
-                                                    value={config.host}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, host: e.target.value }))}
-                                                    placeholder="192.168.1.100"
-                                                    className="pl-10 h-11 rounded-xl bg-slate-50 border-slate-200 font-mono text-sm"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="space-y-2">
-                                            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Database Name</Label>
-                                            <div className="relative">
-                                                <Database className="absolute left-3 top-3.5 h-4 w-4 text-slate-400" />
-                                                <Input
-                                                    value={config.database}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, database: e.target.value }))}
-                                                    placeholder="hanan_ventures_db"
-                                                    className="pl-10 h-11 rounded-xl bg-slate-50 border-slate-200 font-bold text-sm"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="grid grid-cols-2 gap-6">
-                                            <div className="space-y-2">
-                                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Username</Label>
-                                                <Input
-                                                    value={config.username}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, username: e.target.value }))}
-                                                    placeholder="admin"
-                                                    className="h-11 rounded-xl bg-slate-50 border-slate-200 font-bold text-sm"
-                                                />
-                                            </div>
-                                            <div className="space-y-2">
-                                                <Label className="text-[10px] font-black uppercase tracking-widest text-slate-500">Password</Label>
-                                                <Input
-                                                    type="password"
-                                                    value={config.password}
-                                                    onChange={(e) => setConfig(prev => ({ ...prev, password: e.target.value }))}
-                                                    placeholder="••••••••"
-                                                    className="h-11 rounded-xl bg-slate-50 border-slate-200"
-                                                />
-                                            </div>
-                                        </div>
-                                    </motion.div>
-                                ) : (
-                                    <motion.div
-                                        initial={{ opacity: 0 }}
-                                        animate={{ opacity: 1 }}
-                                        className="p-6 bg-slate-50 rounded-2xl border border-slate-100 flex flex-col items-center justify-center text-center space-y-3"
-                                    >
-                                        <div className="w-12 h-12 rounded-full bg-slate-200 flex items-center justify-center text-slate-500">
-                                            <HardDrive className="w-6 h-6" />
-                                        </div>
+                                    {loadError ? (
+                                        <p className="text-xs text-red-600">{loadError}</p>
+                                    ) : dbInfo ? (
                                         <div>
-                                            <h3 className="text-sm font-black text-slate-900 uppercase">Local Storage Active</h3>
-                                            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto">
-                                                Application is reading from the embedded SQLite database at <code className="bg-slate-200 px-1 rounded">app_data/hanan.db</code>
+                                            <p className="text-xs text-slate-500 mt-1 max-w-sm mx-auto break-all">
+                                                <code className="bg-slate-200 px-1 rounded">{dbInfo.path}</code>
+                                            </p>
+                                            <p className="text-[10px] text-slate-400 mt-2 uppercase tracking-widest font-bold">
+                                                {formatBytes(dbInfo.size_bytes)}
                                             </p>
                                         </div>
-                                    </motion.div>
-                                )}
+                                    ) : (
+                                        <p className="text-xs text-slate-400">Loading...</p>
+                                    )}
+                                </div>
 
-                                {testResult && (
-                                    <motion.div
-                                        initial={{ opacity: 0, y: 10 }}
-                                        animate={{ opacity: 1, y: 0 }}
-                                        className={`p-4 rounded-xl border ${testResult.success ? 'bg-emerald-50 border-emerald-200 text-emerald-800' : 'bg-red-50 border-red-200 text-red-800'} flex items-start gap-3`}
-                                    >
-                                        {testResult.success ? <CheckCircle2 className="w-5 h-5 shrink-0" /> : <WifiOff className="w-5 h-5 shrink-0" />}
+                                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                                    <div className="space-y-1">
+                                        <p className="text-sm font-black text-slate-900 uppercase tracking-tight">Back up now</p>
+                                        <p className="text-[10px] text-slate-500 font-medium max-w-[320px]">
+                                            Copies the current database to your Downloads folder. Move
+                                            the file somewhere safe (external drive, cloud storage) afterwards.
+                                        </p>
+                                    </div>
+                                    <Database className="w-5 h-5 text-slate-300 shrink-0" />
+                                </div>
+
+                                {lastBackupPath && (
+                                    <div className="p-4 rounded-xl border bg-emerald-50 border-emerald-200 text-emerald-800 flex items-start gap-3">
+                                        <CheckCircle2 className="w-5 h-5 shrink-0" />
                                         <div>
-                                            <p className="text-xs font-bold uppercase tracking-wide">{testResult.success ? "Connection Verified" : "Connection Failed"}</p>
-                                            <p className="text-xs mt-1 opacity-90">{testResult.message}</p>
+                                            <p className="text-xs font-bold uppercase tracking-wide">Backup Created</p>
+                                            <p className="text-xs mt-1 opacity-90 break-all">{lastBackupPath}</p>
                                         </div>
-                                    </motion.div>
+                                    </div>
                                 )}
-
                             </CardContent>
-                            <CardFooter className="bg-slate-50 border-t border-slate-100 p-6 flex justify-between items-center">
+                            <CardFooter className="bg-slate-50 border-t border-slate-100 p-6 flex justify-end">
                                 <Button
-                                    variant="ghost"
-                                    onClick={handleTestConnection}
-                                    disabled={!config.isRemote || testing}
-                                    className="text-slate-500 hover:text-slate-900 font-bold uppercase tracking-widest text-[10px]"
-                                >
-                                    {testing ? "Pinging..." : "Test Connection"}
-                                </Button>
-                                <Button
-                                    onClick={handleSave}
-                                    disabled={loading}
+                                    onClick={handleBackup}
+                                    disabled={backingUp}
                                     className="bg-slate-900 hover:bg-slate-800 text-white font-black uppercase tracking-widest text-[10px] h-11 px-8 shadow-lg shadow-slate-200"
                                 >
-                                    {loading ? (
-                                        <span className="flex items-center gap-2">Saving...</span>
+                                    {backingUp ? (
+                                        <span className="flex items-center gap-2">Backing up...</span>
                                     ) : (
-                                        <span className="flex items-center gap-2"><Save className="w-4 h-4" /> Save Configuration</span>
+                                        <span className="flex items-center gap-2"><Download className="w-4 h-4" /> Back Up Database</span>
                                     )}
                                 </Button>
                             </CardFooter>
+                        </Card>
+                        <Card className="bg-white border-slate-200 shadow-sm rounded-3xl overflow-hidden">
+                            <CardHeader className="border-b border-slate-100 pb-6">
+                                <CardTitle className="text-lg font-black text-slate-900 uppercase tracking-tight">Automatic Backups</CardTitle>
+                                <CardDescription className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                                    Once a day, last {backupInfo?.keep ?? 14} kept
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent className="p-8 space-y-5">
+                                {backupInfo ? (
+                                    <>
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Saved in</p>
+                                            <code className="bg-slate-100 px-2 py-1 rounded text-xs break-all">{backupInfo.dir}</code>
+                                        </div>
+
+                                        {isSuperAdmin && (
+                                            <div className="space-y-2">
+                                                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Change folder (full path, e.g. an external drive)</p>
+                                                <div className="flex gap-2">
+                                                    <Input
+                                                        value={backupDirInput}
+                                                        onChange={(e) => setBackupDirInput(e.target.value)}
+                                                        placeholder="Leave empty for the default folder"
+                                                        className="text-xs"
+                                                    />
+                                                    <Button onClick={handleSaveBackupDir} disabled={savingDir} variant="outline" className="text-[10px] font-black uppercase tracking-widest">
+                                                        {savingDir ? "Saving..." : "Save"}
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <div>
+                                            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">
+                                                {backupInfo.files.length === 0 ? "No backups yet" : `Latest: ${new Date(backupInfo.files[0].modified_secs * 1000).toLocaleString()}`}
+                                            </p>
+                                            <div className="rounded-xl border border-slate-100 divide-y divide-slate-100 max-h-48 overflow-auto">
+                                                {backupInfo.files.slice(0, 20).map((f) => (
+                                                    <div key={f.name} className="flex justify-between gap-3 px-3 py-2 text-xs">
+                                                        <span className="truncate text-slate-700">{f.name}</span>
+                                                        <span className="shrink-0 text-slate-400">{formatBytes(f.size_bytes)}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <p className="text-xs text-slate-400">Loading...</p>
+                                )}
+                            </CardContent>
                         </Card>
                     </div>
                 </div>

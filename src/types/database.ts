@@ -12,6 +12,9 @@ export type TDatabase = {
   users: TUser[];
   customers: TCustomer[];
   suppliers: TSupplier[];
+  supplier_payables: TSupplierPayable[];
+  supplier_payments: TSupplierPayment[];
+  supplier_payment_allocations: TSupplierPaymentAllocation[];
   products: TProduct[];
   sales: TSale[];
   sale_items: TSaleItem[];
@@ -33,6 +36,7 @@ export type TUser = {
   password?: string;
   isActive: boolean;
   role: UserRole;
+  must_change_password?: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -105,6 +109,10 @@ export type TSale = {
   discount: number;
   total_cost?: number;
   gross_profit?: number;
+  /** Value of goods returned/voided; the sale's net total is total_amount - returned_amount. */
+  returned_amount?: number;
+  returned_cost?: number;
+  status?: 'completed' | 'voided';
   payments?: Omit<TSalePayment, "id" | 'sale_id'>[];
   created_at: string;
   updated_at: string;
@@ -120,6 +128,8 @@ export type TSaleItem = {
   total_price: number;
   cost_price_at_sale?: number;
   profit?: number;
+  base_quantity?: number;
+  returned_quantity?: number;
   unit_name?: string;
   unit_abbrev?: string;
   created_at: string;
@@ -141,15 +151,33 @@ export type TDebtor = {
   customer_id: string;
   customer_name?: string;
   amount_owed: number;
+  /** Amount the sale originally put on credit; amount_owed is what is still unpaid. */
+  original_amount?: number;
+  /** Set on the per-customer aggregate returned by getDebtors(). */
+  sale_count?: number;
   due_date: string;
   is_paid: boolean;
   created_at: string;
   updated_at: string;
 }
 
+/** One credit sale a customer still owes on. */
+export type TDebtorSale = {
+  id: string;
+  sale_id: string;
+  customer_id: string;
+  amount_owed: number;
+  original_amount: number;
+  due_date: string;
+  created_at: string;
+  sale_amount: number;
+  sale_date: string;
+}
+
 export type TDebtorPayment = {
   id: string;
   debtor_id: string;
+  payment_group_id?: string;
   payment_date: string;
   payment_method: PaymentMethod;
   bank_name: string;
@@ -199,6 +227,66 @@ export type TPurchaseReceiptItem = {
   quantity_received: number;
   created_at: string;
   updated_at: string;
+}
+
+export type TSupplierPayable = {
+  id: string;
+  supplier_id: string;
+  purchase_order_id: string;
+  amount_accrued: number;
+  amount_allocated: number;
+  created_at: string;
+  updated_at: string;
+  supplier_name?: string;
+  order_date?: string;
+  outstanding_amount?: number;
+  total_paid?: number;
+}
+
+export type TSupplierPayment = {
+  id: string;
+  supplier_id: string;
+  purchase_order_id?: string | null;
+  payment_date: string;
+  payment_method: PaymentMethod;
+  bank_name: string;
+  reference_number: string;
+  amount_paid: number;
+  notes: string;
+  employee_id: string;
+  employee_name?: string;
+  supplier_name?: string;
+  is_unapplied_credit: boolean;
+  created_at: string;
+  allocated_amount?: number;
+  remaining_credit?: number;
+}
+
+export type TSupplierPaymentAllocation = {
+  id: string;
+  supplier_payment_id: string;
+  supplier_payable_id: string;
+  allocated_amount: number;
+  created_at: string;
+  purchase_order_id?: string;
+}
+
+export type TSupplierBalanceSummary = {
+  supplier_id: string;
+  total_accrued: number;
+  total_allocated_paid: number;
+  unapplied_credit: number;
+  net_outstanding: number;
+}
+
+export type TPurchaseOrderPayableSummary = {
+  supplier_id: string;
+  purchase_order_id: string;
+  total_accrued: number;
+  total_paid: number;
+  outstanding: number;
+  supplier_name?: string;
+  order_date?: string;
 }
 
 export type TBusinessExpense = {
@@ -273,4 +361,18 @@ export type ProductAnalytics = {
     revenue: number;
     profit: number;
   }[];
+}
+
+export type TSaleReturn = {
+  id: string;
+  sale_id: string;
+  kind: 'void' | 'return';
+  reason: string;
+  total_amount: number;
+  debt_reduced: number;
+  refund_amount: number;
+  refund_method?: PaymentMethod | null;
+  employee_id: string;
+  employee_name?: string;
+  created_at: string;
 }

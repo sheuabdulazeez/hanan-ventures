@@ -1,4 +1,4 @@
-import { initDatabase } from "./index";
+import { initDatabase, round2 } from "./index";
 
 export type PurchaseOrderStatus = 'pending' | 'partially_received' | 'received' | 'cancelled';
 export type PurchaseReceiptStatus = 'pending' | 'approved' | 'rejected';
@@ -49,11 +49,61 @@ export interface PurchaseReceiptItem {
     unit_name?: string; // Joined
 }
 
+async function upsertSupplierPayableAccrual(
+    db: Awaited<ReturnType<typeof initDatabase>>,
+    supplierId: string,
+    purchaseOrderId: string,
+    amountAccrued: number,
+) {
+    if (amountAccrued <= 0) {
+        return;
+    }
+
+    const existingPayable = await db.selectOne<{ id: string }>(
+        `SELECT id FROM supplier_payables WHERE purchase_order_id = $1`,
+        [purchaseOrderId],
+    );
+
+    if (existingPayable?.id) {
+        await db.executeQuery(
+            `
+                UPDATE supplier_payables
+                SET
+                    amount_accrued = amount_accrued + $1,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE purchase_order_id = $2
+            `,
+            [amountAccrued, purchaseOrderId],
+        );
+        return;
+    }
+
+    await db.executeQuery(
+        `
+            INSERT INTO supplier_payables (
+                id,
+                supplier_id,
+                purchase_order_id,
+                amount_accrued,
+                amount_allocated
+            ) VALUES (lower(hex(randomblob(16))), $1, $2, $3, 0)
+        `,
+        [supplierId, purchaseOrderId, amountAccrued],
+    );
+}
+
 export const createPurchaseOrder = async (
     supplierId: string,
     employeeId: string,
     items: { productId: string; quantity: number; unitPrice: number; unitId?: string }[]
 ) => {
+    if (items.length === 0) {
+        throw new Error("A purchase order needs at least one item.");
+    }
+    if (items.some((item) => !(item.quantity > 0) || !(item.unitPrice > 0))) {
+        throw new Error("Every purchase order line needs a quantity and a price greater than zero.");
+    }
+
     const db = await initDatabase();
 
     // Generate distinct ID first
@@ -62,7 +112,7 @@ export const createPurchaseOrder = async (
     try {
         await db.beginTransaction();
 
-        const totalCost = items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0);
+        const totalCost = round2(items.reduce((sum, item) => sum + (item.quantity * item.unitPrice), 0));
 
         await db.executeQuery(`
             INSERT INTO purchase_orders (id, supplier_id, employee_id, total_cost, status)
@@ -73,7 +123,7 @@ export const createPurchaseOrder = async (
             await db.executeQuery(`
                 INSERT INTO purchase_order_items (purchase_order_id, product_id, quantity_ordered, unit_price, total_price, unit_id)
                 VALUES ($1, $2, $3, $4, $5, $6)
-            `, [poId, item.productId, item.quantity, item.unitPrice, item.quantity * item.unitPrice, item.unitId || null]);
+            `, [poId, item.productId, item.quantity, item.unitPrice, round2(item.quantity * item.unitPrice), item.unitId || null]);
         }
 
         await db.commit();
@@ -175,12 +225,46 @@ export const createPurchaseReceipt = async (
         `, [receiptId, purchaseOrderId, employeeId]);
 
         for (const item of items) {
-            if (item.quantityReceived > 0) {
-                await db.executeQuery(`
-                    INSERT INTO purchase_receipt_items (purchase_receipt_id, product_id, quantity_received, unit_id)
-                    VALUES ($1, $2, $3, $4)
-                `, [receiptId, item.productId, item.quantityReceived, item.unitId || null]);
+            if (item.quantityReceived <= 0) continue;
+
+            // Convert to base units to compare against what was ordered, regardless of unit.
+            let quantityInBase = item.quantityReceived;
+            if (item.unitId) {
+                const productUnit = await db.selectOne<{ conversion_to_base: number }>(
+                    `SELECT conversion_to_base FROM product_units WHERE id = $1`,
+                    [item.unitId],
+                );
+                if (productUnit) quantityInBase = item.quantityReceived * productUnit.conversion_to_base;
             }
+
+            const orderedRow = await db.selectOne<{ total_ordered: number }>(`
+                SELECT COALESCE(SUM(quantity_ordered * COALESCE(pu.conversion_to_base, 1)), 0) as total_ordered
+                FROM purchase_order_items poi
+                LEFT JOIN product_units pu ON poi.unit_id = pu.id
+                WHERE poi.purchase_order_id = $1 AND poi.product_id = $2
+            `, [purchaseOrderId, item.productId]);
+
+            // Count both pending and already-approved receipts so several pending
+            // receipts can't silently stack past what was ordered.
+            const claimedRow = await db.selectOne<{ total_claimed: number }>(`
+                SELECT COALESCE(SUM(pri.quantity_received * COALESCE(pu.conversion_to_base, 1)), 0) as total_claimed
+                FROM purchase_receipt_items pri
+                JOIN purchase_receipts pr ON pri.purchase_receipt_id = pr.id
+                LEFT JOIN product_units pu ON pri.unit_id = pu.id
+                WHERE pr.purchase_order_id = $1 AND pri.product_id = $2 AND pr.status IN ('pending', 'approved')
+            `, [purchaseOrderId, item.productId]);
+
+            const totalOrdered = Number(orderedRow?.total_ordered || 0);
+            const totalClaimed = Number(claimedRow?.total_claimed || 0);
+
+            if (totalClaimed + quantityInBase > totalOrdered + 1e-9) {
+                throw new Error("Received quantity exceeds what's still outstanding on this purchase order.");
+            }
+
+            await db.executeQuery(`
+                INSERT INTO purchase_receipt_items (purchase_receipt_id, product_id, quantity_received, unit_id)
+                VALUES ($1, $2, $3, $4)
+            `, [receiptId, item.productId, item.quantityReceived, item.unitId || null]);
         }
 
         await db.commit();
@@ -219,7 +303,7 @@ export const getPendingReceipts = async () => {
     return result;
 }
 
-export const approveReceipt = async (receiptId: string) => {
+export const approveReceipt = async (receiptId: string, approvedBy: string) => {
     const db = await initDatabase();
     try {
         await db.beginTransaction();
@@ -228,10 +312,32 @@ export const approveReceipt = async (receiptId: string) => {
         const receipt = await db.selectOne<PurchaseReceipt>(`SELECT * FROM purchase_receipts WHERE id = $1`, [receiptId]);
         if (!receipt) throw new Error("Receipt not found");
 
+        // Atomically claim the receipt before doing any mutation, so a concurrent
+        // double-click/retry can't process the same receipt twice: only one
+        // transaction's conditional UPDATE can affect a row while status is 'pending'.
+        const claim = await db.executeQuery(
+            `UPDATE purchase_receipts SET status = 'approved' WHERE id = $1 AND status = 'pending'`,
+            [receiptId],
+        );
+        if (!claim.rowsAffected) {
+            throw new Error(`Receipt has already been ${receipt.status}; it cannot be approved again.`);
+        }
+
+        const purchaseOrder = await db.selectOne<{ id: string, supplier_id: string }>(
+            `SELECT id, supplier_id FROM purchase_orders WHERE id = $1`,
+            [receipt.purchase_order_id],
+        );
+
+        if (!purchaseOrder) {
+            throw new Error("Purchase order not found");
+        }
+
         // 1. Get Receipt Items
         const items = await db.select<PurchaseReceiptItem[]>(`
             SELECT * FROM purchase_receipt_items WHERE purchase_receipt_id = $1
         `, [receiptId]);
+
+        let accruedPayableAmount = 0;
 
         // 2. Update Inventory for each item (Handling Conversions)
         for (const item of items) {
@@ -248,17 +354,63 @@ export const approveReceipt = async (receiptId: string) => {
                 }
             }
 
+            // What this order agreed to pay per BASE unit for the product. Prefer the
+            // PO line in the same unit the goods arrived in, but fall back to any line
+            // for the product: price is converted to base units, so receiving cartons
+            // against a per-piece order line still accrues the right amount.
+            const orderLines = await db.select<{ unit_id: string | null; unit_price: number; conversion: number }[]>(`
+                SELECT poi.unit_id, poi.unit_price, COALESCE(pu.conversion_to_base, 1) as conversion
+                FROM purchase_order_items poi
+                LEFT JOIN product_units pu ON poi.unit_id = pu.id
+                WHERE poi.purchase_order_id = $1 AND poi.product_id = $2
+            `, [receipt.purchase_order_id, item.product_id]);
+            const line =
+                orderLines.find((l) => (l.unit_id || null) === (item.unit_id || null)) || orderLines[0];
+            if (!line) {
+                throw new Error("A received item is not on this purchase order.");
+            }
+            const pricePerBaseUnit = Number(line.unit_price) / (Number(line.conversion) || 1);
+
+            accruedPayableAmount += quantityToAdd * pricePerBaseUnit;
+
+            // Weighted-average cost: blend what is on the shelf with what just arrived,
+            // so profit and stock value follow what the supplier really charged.
+            const product = await db.selectOne<{ quantity_on_hand: number; cost_price: number | null; selling_price: number | null }>(`
+                SELECT quantity_on_hand, cost_price, selling_price FROM products WHERE id = $1
+            `, [item.product_id]);
+            if (!product) {
+                throw new Error("A received product no longer exists.");
+            }
+            const onHand = Math.max(0, Number(product.quantity_on_hand) || 0);
+            const oldCost = Number(product.cost_price) || 0;
+            const newCost =
+                onHand > 0 && oldCost > 0
+                    ? (onHand * oldCost + quantityToAdd * pricePerBaseUnit) / (onHand + quantityToAdd)
+                    : pricePerBaseUnit;
+            const roundedCost = Math.round(newCost * 10000) / 10000;
+
             await db.executeQuery(`
-                UPDATE products 
-                SET quantity_on_hand = quantity_on_hand + $1 
-                WHERE id = $2
-            `, [quantityToAdd, item.product_id]);
+                UPDATE products
+                SET quantity_on_hand = quantity_on_hand + $1, cost_price = $2, updated_at = CURRENT_TIMESTAMP
+                WHERE id = $3
+            `, [quantityToAdd, roundedCost, item.product_id]);
+
+            if (Math.abs(roundedCost - oldCost) > 0.00005) {
+                await db.executeQuery(`
+                    INSERT INTO product_price_history (product_id, old_cost_price, new_cost_price, change_reason, changed_by)
+                    VALUES ($1, $2, $3, $4, $5)
+                `, [item.product_id, oldCost, roundedCost, "Weighted-average cost after receiving stock", approvedBy]);
+            }
         }
 
-        // 3. Mark Receipt as Approved
-        await db.executeQuery(`
-            UPDATE purchase_receipts SET status = 'approved' WHERE id = $1
-        `, [receiptId]);
+        // 3. Receipt was already marked approved by the atomic claim above.
+
+        await upsertSupplierPayableAccrual(
+            db,
+            purchaseOrder.supplier_id,
+            receipt.purchase_order_id,
+            Number(accruedPayableAmount.toFixed(2)),
+        );
 
         // 4. Update PO Status
         // Calculate total ordered vs total approved received for this PO
@@ -290,7 +442,7 @@ export const approveReceipt = async (receiptId: string) => {
 
         for (const poItem of poItems) {
             const received = receivedMap.get(poItem.product_id) || 0;
-            if (received < poItem.total_ordered) {
+            if (received < poItem.total_ordered - 1e-9) {
                 allReceived = false;
                 break;
             }

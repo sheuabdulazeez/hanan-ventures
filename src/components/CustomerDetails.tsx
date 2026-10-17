@@ -318,8 +318,13 @@ export function CustomerDetails({
                                         <DollarSign className="w-3 h-3 mr-1" /> Original Amount
                                       </p>
                                       <p className="text-xl font-black text-slate-900">
-                                        ₦{debt.amount_owed.toFixed(2)}
+                                        ₦{Number(debt.original_amount ?? debt.amount_owed).toFixed(2)}
                                       </p>
+                                      {!debt.is_paid && (
+                                        <p className="text-[10px] font-black uppercase text-red-600">
+                                          Balance ₦{Number(debt.amount_owed).toFixed(2)}
+                                        </p>
+                                      )}
                                     </div>
                                     <div className="space-y-1">
                                       <p className="text-[9px] font-black uppercase text-slate-400 flex items-center tracking-tighter">

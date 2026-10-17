@@ -1,62 +1,105 @@
 import { TUser } from "@/types/database";
+import { invoke } from "@tauri-apps/api/core";
 import { initDatabase } from ".";
-import bcrypt from "bcryptjs"
 
+/*
+ * Authentication and user management run in the Rust backend: passwords are
+ * hashed and checked there, and the logged-in role used for authorization is held
+ * there too, so the webview cannot claim a role or write the users table directly.
+ */
+
+// Rows come back with snake_case columns; the UI works with `isActive`.
+function toUser(row: any): TUser {
+    return {
+        ...row,
+        isActive: row.is_active === undefined ? true : Boolean(row.is_active),
+        must_change_password: Boolean(row.must_change_password),
+    } as TUser;
+}
+
+function errorMessage(error: unknown): string {
+    return typeof error === "string" ? error : (error as Error)?.message || "Something went wrong";
+}
 
 export async function getUsers() {
     const db = await initDatabase();
-    const result = await db.select<TUser[]>('SELECT * FROM users where role != "super_admin"');
-    return result;
+    const result = await db.select<any[]>("SELECT * FROM users WHERE role != 'super_admin' ORDER BY name ASC");
+    return result.map(toUser);
 }
 
-
 export async function create(user: Omit<TUser, "id" | "created_at" | "updated_at">) {
-    const db = await initDatabase();
-    const password = await bcrypt.hash(user.password, 10);
-    const { lastInsertId: id } = await db.execute('INSERT INTO users (name, username, phone, password, role) VALUES ($1, $2, $3, $4, $5)', [user.name, user.username, user.phone, password, user.role]);
-    return id;
+    try {
+        return await invoke<string>("create_user", {
+            user: {
+                name: user.name,
+                username: user.username,
+                phone: user.phone,
+                password: user.password,
+                role: user.role,
+            },
+        });
+    } catch (error) {
+        throw new Error(errorMessage(error));
+    }
 }
 
 export async function update(id: string, user: Omit<TUser, "id" | "created_at" | "updated_at">) {
-    const db = await initDatabase();
-    // If the password is provided, we have to update the password
-    if (!user.password) return db.execute('UPDATE users SET name = $1, username = $2, role = $3, phone = $4 WHERE id = $5', [user.name, user.username, user.role, user.phone, id]);
-    const password = await bcrypt.hash(user.password, 10);
-    return db.execute('UPDATE users SET name = $1, username = $2, password = $3, role = $4, phone = $5 WHERE id = $6', [user.name, user.username, password, user.role, user.phone, id]);
+    try {
+        await invoke("update_user", {
+            id,
+            user: {
+                name: user.name,
+                username: user.username,
+                phone: user.phone,
+                role: user.role,
+                password: user.password || null,
+            },
+        });
+    } catch (error) {
+        throw new Error(errorMessage(error));
+    }
 }
 
 export async function toggleActive(id: string, isActive: boolean) {
-    const db = await initDatabase();
-    return db.execute('UPDATE users SET is_active = $1 WHERE id = $2', [isActive, id]);
+    try {
+        await invoke("set_user_active", { id, isActive });
+    } catch (error) {
+        throw new Error(errorMessage(error));
+    }
 }
 
-export async function initializeSuperUser() {
-    const db = await initDatabase();
-
-    // Check if the super user already exists
-    const superUser = await db.selectOne<TUser>('SELECT * FROM users WHERE username = $1', ["admin"]);
-
-    if (superUser) {
-        // Ensure existing admin is promoted to super_admin
-        if (superUser.role !== 'super_admin' as any) {
-            await db.execute('UPDATE users SET role = $1 WHERE username = $2', ['super_admin', 'admin']);
-        }
-        return;
-    };
-
+/** Change the logged-in user's own password. */
+export async function changePassword(newPassword: string) {
     try {
-        const password = await bcrypt.hash("letmeonlinenow", 10);
-        await db.execute('INSERT INTO users (name, username, password, role) VALUES ($1, $2, $3, $4)', ["Super", "admin", password, "super_admin"])
+        await invoke("change_password", { newPassword });
     } catch (error) {
-        console.error("There was an error trying to create super admin", error)
+        throw new Error(errorMessage(error));
     }
 }
 
 export async function login(username: string, password: string): Promise<TUser | { error: string }> {
-    const db = await initDatabase();
-    const user = await db.selectOne<TUser>('SELECT * FROM users WHERE username = $1', [username]);
-    if (!user) return { error: "User not found" };
-    const isValid = await bcrypt.compare(password, user.password);
-    if (!isValid) return { error: "Invalid password" };
-    return user;
+    try {
+        const row = await invoke<any>("login", { username, password });
+        return toUser(row);
+    } catch (error) {
+        return { error: errorMessage(error) };
+    }
+}
+
+export async function logoutSession() {
+    try {
+        await invoke("logout");
+    } catch (error) {
+        console.error("Failed to end session", error);
+    }
+}
+
+/** The user the backend considers logged in, if any (survives a UI reload). */
+export async function getActiveSession(): Promise<TUser | null> {
+    try {
+        const row = await invoke<any | null>("get_session");
+        return row ? toUser(row) : null;
+    } catch {
+        return null;
+    }
 }

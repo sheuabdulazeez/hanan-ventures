@@ -1,6 +1,9 @@
+mod auth;
 mod database;
+mod files;
+mod guard;
 mod printer;
-use database::DatabaseConnection;
+use database::Db;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -10,19 +13,26 @@ pub fn run() {
             .plugin(tauri_plugin_fs::init())
             .plugin(tauri_plugin_store::Builder::new().build())
             .setup(|app| {
-
                 let db_name = if cfg!(debug_assertions) {
                     "dev.db"
                 } else {
                     "app.db"
                 };
 
-                let db_path = app.path().app_config_dir().unwrap().join(db_name);
+                let config_dir = app.path().app_config_dir().unwrap();
+                let db_path = config_dir.join(db_name);
+                let backup_dir = config_dir.join("backups");
+
+                // Register the state synchronously so no command can run before it
+                // exists; the database itself opens on first use (warmed up below).
+                app.manage(Db::new(db_path, backup_dir));
 
                 let app_handle = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
-                    let db_conn = DatabaseConnection::new(db_path).await;
-                    app_handle.manage(db_conn);
+                    let db = app_handle.state::<Db>();
+                    if let Err(e) = db.conn().await {
+                        eprintln!("{e}");
+                    }
                 });
 
                 Ok(())
@@ -34,9 +44,21 @@ pub fn run() {
                 database::rollback_transaction,
                 database::find_one,
                 database::find_many,
+                database::backup_database,
+                database::get_backup_info,
+                database::set_backup_dir,
+                auth::login,
+                auth::logout,
+                auth::get_session,
+                auth::create_user,
+                auth::update_user,
+                auth::set_user_active,
+                auth::change_password,
                 printer::get_printers,
                 printer::print_pdf,
-                printer::test_print
+                printer::test_print,
+                files::save_bytes_to_downloads,
+                files::get_database_info
             ])
             .plugin(tauri_plugin_opener::init())
             .run(tauri::generate_context!())
@@ -44,11 +66,10 @@ pub fn run() {
     });
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+
     #[test]
     fn test_list_printers() {
         let printers = printer::get_printers().unwrap();
@@ -57,6 +78,4 @@ mod tests {
             println!("  - {} ({})", printer.name, printer.port);
         }
     }
-    
-   
 }

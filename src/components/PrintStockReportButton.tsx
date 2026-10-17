@@ -1,18 +1,19 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FaPrint } from "react-icons/fa";
-import { WebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { stockInventoryHtml } from "@/lib/utils";
+import { Printer } from "lucide-react";
 import { TProduct } from "@/types/database";
 import { toast } from "@/hooks/use-toast";
 import { useAppStore } from "@/lib/store";
+import { pdf } from "@react-pdf/renderer";
+import { invoke } from "@tauri-apps/api/core";
+import StockReportPDF from "@/components/pdf/StockReportPDF";
 
 interface PrintStockReportButtonProps {
   products: TProduct[];
 }
 
 export function PrintStockReportButton({ products }: PrintStockReportButtonProps) {
-  const { businessInfo, receiptSettings, systemSettings } = useAppStore();
+  const { businessInfo, receiptSettings } = useAppStore();
   const [isLoading, setIsLoading] = useState(false);
 
   const handlePrint = async () => {
@@ -27,42 +28,54 @@ export function PrintStockReportButton({ products }: PrintStockReportButtonProps
 
     setIsLoading(true);
     try {
-      const settings = {
-        businessInfo,
-        receiptSettings,
-        systemSettings,
-      };
+      if (!receiptSettings.printerPort) {
+        toast({ title: "No printer selected", variant: "destructive" });
+        return;
+      }
 
-      // Generate HTML content
-      const htmlContent = stockInventoryHtml(products, settings);
+      const doc = (
+        <StockReportPDF
+          products={products}
+          businessName={businessInfo.name}
+        />
+      );
 
-      // Create a new webview window for printing
-      const printWindow = new WebviewWindow('print', {
-        url: '/print.html',
-        title: 'Stock Inventory Report',
-        width: 800,
-        height: 600,
-        resizable: true,
-        visible: false,
+      const blob = await pdf(doc).toBlob();
+      const buffer = await blob.arrayBuffer();
+      const bytes = Array.from(new Uint8Array(buffer));
+      const printOptions =
+        receiptSettings.printTransport === "serial"
+          ? {
+              transport: "serial" as const,
+              serialConfig: {
+                baud_rate: receiptSettings.serialBaudRate,
+                timeout_ms: receiptSettings.serialTimeoutMs,
+                chunk_size: receiptSettings.serialChunkSize,
+                chunk_delay_ms: receiptSettings.serialChunkDelayMs,
+                parity: receiptSettings.serialParity,
+                stop_bits: receiptSettings.serialStopBits,
+                data_bits: receiptSettings.serialDataBits,
+                flow_control: receiptSettings.serialFlowControl,
+              },
+            }
+          : {
+              transport: "spooler" as const,
+              serialConfig: undefined,
+            };
+
+      await invoke("print_pdf", {
+        printerPort: receiptSettings.printerPort,
+        pdfBytes: bytes,
+        paperWidth: receiptSettings.paperSize === "58mm" ? 58 : 80,
+        transport: printOptions.transport,
+        serialConfig: printOptions.serialConfig,
       });
 
-      // Wait for the webview to load
-      await printWindow.once('tauri://created', () => {
-        console.log('Print window created');
-      });
-      printWindow.listen("loaded", async () => {
-      await printWindow.emit("print-content", {
-        html: htmlContent,
-      });
-      await printWindow.show();
-      await printWindow.setFocus();
       toast({
-        title: 'Stock report sent to printer',
+        title: "Stock report sent to printer",
       });
-    })
-
     } catch (error) {
-      console.error('Error printing stock report:', error);
+      console.error("Error printing stock report:", error);
       toast({
         variant: "destructive",
         title: "Print Error",
@@ -79,10 +92,10 @@ export function PrintStockReportButton({ products }: PrintStockReportButtonProps
       disabled={isLoading || !products || products.length === 0}
       variant="outline"
       size="sm"
-      className="flex items-center gap-2"
+      className="border-slate-200 text-slate-600 font-black uppercase tracking-widest text-[10px] h-12 px-6 flex items-center gap-2"
     >
-      <FaPrint className="h-4 w-4" />
-      {isLoading ? 'Generating...' : 'Print Stock Report'}
+      <Printer className="h-4 w-4" />
+      {isLoading ? "Generating..." : "Print Stock Report"}
     </Button>
   );
 }

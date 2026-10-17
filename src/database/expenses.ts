@@ -48,12 +48,12 @@ export async function getExpenses(filters?: ExpenseFilters): Promise<TBusinessEx
   const params: any[] = [];
   
   if (filters?.startDate) {
-    query += ` AND DATE(be.expense_date) >= ?`;
+    query += ` AND DATE(CASE WHEN length(be.expense_date) > 10 THEN datetime(be.expense_date, 'localtime') ELSE be.expense_date END) >= ?`;
     params.push(filters.startDate);
   }
   
   if (filters?.endDate) {
-    query += ` AND DATE(be.expense_date) <= ?`;
+    query += ` AND DATE(CASE WHEN length(be.expense_date) > 10 THEN datetime(be.expense_date, 'localtime') ELSE be.expense_date END) <= ?`;
     params.push(filters.endDate);
   }
   
@@ -102,7 +102,6 @@ export async function createExpense(data: CreateExpenseData): Promise<string> {
   const { expenseId } = await db.selectOne<{ expenseId: string }>(
     `SELECT lower(hex(randomblob(16))) as expenseId`
   );
-  console.log(data)
   await db.execute(
     `
       INSERT INTO business_expenses (
@@ -189,12 +188,12 @@ export async function getExpenseStats(filters?: ExpenseFilters): Promise<Expense
   const params: any[] = [];
   
   if (filters?.startDate) {
-    whereClause += ` AND DATE(expense_date) >= ?`;
+    whereClause += ` AND DATE(CASE WHEN length(expense_date) > 10 THEN datetime(expense_date, 'localtime') ELSE expense_date END) >= ?`;
     params.push(filters.startDate);
   }
   
   if (filters?.endDate) {
-    whereClause += ` AND DATE(expense_date) <= ?`;
+    whereClause += ` AND DATE(CASE WHEN length(expense_date) > 10 THEN datetime(expense_date, 'localtime') ELSE expense_date END) <= ?`;
     params.push(filters.endDate);
   }
   

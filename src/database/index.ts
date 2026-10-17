@@ -77,3 +77,13 @@ export class Database {
 export const initDatabase = async () => {
   return new Database();
 };
+
+/** Round a money value to 2 decimals (avoids float drift like 0.1 + 0.2). */
+export const round2 = (value: number) => Math.round(((Number(value) || 0) + Number.EPSILON) * 100) / 100;
+
+/**
+ * Format a Date as UTC "YYYY-MM-DD HH:MM:SS", the format SQLite's CURRENT_TIMESTAMP
+ * stores. Comparing against toISOString() ("...T...Z") is wrong because 'T' sorts
+ * after ' ', which silently drops every row on the boundary day.
+ */
+export const toSqlUtc = (date: Date) => date.toISOString().replace("T", " ").slice(0, 19);

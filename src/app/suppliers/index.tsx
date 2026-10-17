@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { FaTrash, FaPlus } from 'react-icons/fa';
 import { Link } from 'react-router';
-import { getSuppliers, deleteSupplier, type Supplier } from '@/database/suppliers';
+import { getSuppliers, deleteSupplier, deleteSupplierWithOrders, getSupplierPurchaseOrderCount, type Supplier } from '@/database/suppliers';
 import { format } from 'date-fns';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -34,6 +34,10 @@ export default function Suppliers() {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [deleteTarget, setDeleteTarget] = useState<Supplier | null>(null);
+  const [deletePoCount, setDeletePoCount] = useState<number | null>(null);
+  const [isCheckingDelete, setIsCheckingDelete] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const { toast } = useToast();
   const suppliersPerPage = 10;
 
@@ -55,6 +59,32 @@ export default function Suppliers() {
       setIsLoading(false);
     }
   }
+
+  const openDeleteDialog = async (supplier: Supplier) => {
+    setDeleteTarget(supplier);
+    setDeletePoCount(null);
+    setIsCheckingDelete(true);
+    try {
+      const count = await getSupplierPurchaseOrderCount(supplier.id);
+      setDeletePoCount(count);
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Error",
+        description: "Failed to check linked purchase orders"
+      });
+      setDeletePoCount(0);
+    } finally {
+      setIsCheckingDelete(false);
+    }
+  };
+
+  const closeDeleteDialog = () => {
+    setDeleteTarget(null);
+    setDeletePoCount(null);
+    setIsCheckingDelete(false);
+    setIsDeleting(false);
+  };
 
   const filteredSuppliers = suppliers.filter(supplier =>
     supplier.supplier_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -177,12 +207,13 @@ export default function Suppliers() {
                         </TableCell>
                         <TableCell className="text-right px-6 py-4">
                           <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <AlertDialog>
+                            <AlertDialog open={deleteTarget?.id === supplier.id} onOpenChange={(open) => !open && closeDeleteDialog()}>
                               <AlertDialogTrigger asChild>
                                 <Button
                                   variant="ghost"
                                   size="sm"
                                   className="h-8 px-3 text-slate-400 hover:text-red-600 hover:bg-red-50"
+                                  onClick={() => openDeleteDialog(supplier)}
                                 >
                                   <Trash2 className="w-3.5 h-3.5" />
                                 </Button>
@@ -193,30 +224,71 @@ export default function Suppliers() {
                                   <AlertDialogDescription className="text-slate-500 text-xs font-medium">
                                     Are you sure you want to delete <span className="text-slate-900 font-bold">{supplier.supplier_name}</span>? This action is permanent and cannot be undone.
                                   </AlertDialogDescription>
+                                  {isCheckingDelete && (
+                                    <p className="text-xs font-bold uppercase tracking-widest text-slate-400 mt-2">Checking linked purchase orders...</p>
+                                  )}
+                                  {!isCheckingDelete && (deletePoCount || 0) > 0 && (
+                                    <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-[11px] font-bold text-red-700">
+                                      This supplier has {deletePoCount} purchase order{deletePoCount === 1 ? "" : "s"}. Deleting will also remove all related purchase orders and receipts.
+                                    </div>
+                                  )}
                                 </AlertDialogHeader>
                                 <AlertDialogFooter>
                                   <AlertDialogCancel className="text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 border-none bg-transparent">Cancel</AlertDialogCancel>
-                                  <AlertDialogAction
-                                    onClick={async () => {
-                                      try {
-                                        await deleteSupplier(supplier.id);
-                                        await loadSuppliers();
-                                        toast({
-                                          title: "Success",
-                                          description: "Supplier deleted successfully"
-                                        });
-                                      } catch (error) {
-                                        toast({
-                                          variant: "destructive",
-                                          title: "Error",
-                                          description: "Failed to delete supplier"
-                                        });
-                                      }
-                                    }}
-                                    className="bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-widest h-10"
-                                  >
-                                    Confirm Delete
-                                  </AlertDialogAction>
+                                  {(!isCheckingDelete && (deletePoCount || 0) === 0) && (
+                                    <AlertDialogAction
+                                      onClick={async () => {
+                                        try {
+                                          setIsDeleting(true);
+                                          await deleteSupplier(supplier.id);
+                                          await loadSuppliers();
+                                          toast({
+                                            title: "Success",
+                                            description: "Supplier deleted successfully"
+                                          });
+                                          closeDeleteDialog();
+                                        } catch (error) {
+                                          toast({
+                                            variant: "destructive",
+                                            title: "Error",
+                                            description: "Failed to delete supplier"
+                                          });
+                                          setIsDeleting(false);
+                                        }
+                                      }}
+                                      className="bg-red-600 hover:bg-red-700 text-white text-[10px] font-black uppercase tracking-widest h-10"
+                                      disabled={isDeleting}
+                                    >
+                                      Confirm Delete
+                                    </AlertDialogAction>
+                                  )}
+                                  {(!isCheckingDelete && (deletePoCount || 0) > 0) && (
+                                    <AlertDialogAction
+                                      onClick={async () => {
+                                        try {
+                                          setIsDeleting(true);
+                                          await deleteSupplierWithOrders(supplier.id);
+                                          await loadSuppliers();
+                                          toast({
+                                            title: "Deleted",
+                                            description: "Supplier and related purchase orders deleted"
+                                          });
+                                          closeDeleteDialog();
+                                        } catch (error) {
+                                          toast({
+                                            variant: "destructive",
+                                            title: "Error",
+                                            description: "Failed to delete supplier and orders"
+                                          });
+                                          setIsDeleting(false);
+                                        }
+                                      }}
+                                      className="bg-red-700 hover:bg-red-800 text-white text-[10px] font-black uppercase tracking-widest h-10"
+                                      disabled={isDeleting}
+                                    >
+                                      Delete Supplier & Orders
+                                    </AlertDialogAction>
+                                  )}
                                 </AlertDialogFooter>
                               </AlertDialogContent>
                             </AlertDialog>

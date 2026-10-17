@@ -1,12 +1,18 @@
-use std::{io::Write};
 use serde::{Deserialize, Serialize};
+use std::{
+    collections::HashMap,
+    io::Write,
+    sync::{Arc, Mutex, OnceLock},
+    time::Duration,
+};
 
 use printers::common::base::job::PrinterJobOptions;
 
-use pdfium_render::prelude::*;
 use image::{DynamicImage, GrayImage};
+use pdfium_render::prelude::*;
 use std::path::PathBuf;
 use tauri::{AppHandle, Manager};
+use uuid::Uuid;
 
 /// =======================================================
 /// ESC/POS BUILDER
@@ -58,9 +64,8 @@ impl EscPos {
         let hl = (height & 0xFF) as u8;
         let hh = ((height >> 8) & 0xFF) as u8;
 
-        self.buffer.extend_from_slice(&[
-            Self::GS, 0x76, 0x30, 0x00, wl, wh, hl, hh,
-        ]);
+        self.buffer
+            .extend_from_slice(&[Self::GS, 0x76, 0x30, 0x00, wl, wh, hl, hh]);
         self.buffer.extend_from_slice(data);
         self
     }
@@ -74,7 +79,7 @@ impl EscPos {
 /// PDF → ESC/POS PRINTER
 /// =======================================================
 
-pub struct PDFPrinter{
+pub struct PDFPrinter {
     app_handle: AppHandle,
 }
 
@@ -88,10 +93,8 @@ impl PDFPrinter {
         pixel_width: usize,
     ) -> Result<Vec<u8>, String> {
         let path = self.pdfium_path()?;
-        let pdfium = Pdfium::new(
-            Pdfium::bind_to_library(path)
-                .map_err(|e: PdfiumError| e.to_string())?,
-        );
+        let pdfium =
+            Pdfium::new(Pdfium::bind_to_library(path).map_err(|e: PdfiumError| e.to_string())?);
 
         let doc = pdfium
             .load_pdf_from_byte_slice(pdf_bytes, None)
@@ -99,11 +102,13 @@ impl PDFPrinter {
 
         let page = doc.pages().get(0).map_err(|e: PdfiumError| e.to_string())?;
 
-        let render = page.render_with_config(
-            &PdfRenderConfig::new()
-                .set_target_width(pixel_width as i32)
-                .render_form_data(false),
-        ).map_err(|e: PdfiumError| e.to_string())?;
+        let render = page
+            .render_with_config(
+                &PdfRenderConfig::new()
+                    .set_target_width(pixel_width as i32)
+                    .render_form_data(false),
+            )
+            .map_err(|e: PdfiumError| e.to_string())?;
 
         let image = render.as_image();
 
@@ -143,7 +148,9 @@ impl PDFPrinter {
     }
 
     fn pdfium_path(&self) -> Result<PathBuf, String> {
-        let mut pdfium_path = self.app_handle.path()
+        let mut pdfium_path = self
+            .app_handle
+            .path()
             .resource_dir()
             .map_err(|e| format!("Failed to get resource dir: {}", e))?;
 
@@ -159,9 +166,7 @@ impl PDFPrinter {
 
         Ok(pdfium_path)
     }
-
 }
-
 
 /// =======================================================
 /// PRINTER MANAGER
@@ -175,7 +180,39 @@ pub struct PrinterInfo {
 
 pub struct PrinterManager;
 
+static PRINTER_LOCKS: OnceLock<Mutex<HashMap<String, Arc<Mutex<()>>>>> = OnceLock::new();
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum PrintTransport {
+    Spooler,
+    Serial,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct SerialPrintConfig {
+    pub baud_rate: Option<u32>,
+    pub timeout_ms: Option<u64>,
+    pub chunk_size: Option<usize>,
+    pub chunk_delay_ms: Option<u64>,
+    pub parity: Option<String>,
+    pub stop_bits: Option<u8>,
+    pub data_bits: Option<u8>,
+    pub flow_control: Option<String>,
+}
+
 impl PrinterManager {
+    fn lock_for(printer_port: &str) -> Result<Arc<Mutex<()>>, String> {
+        let map = PRINTER_LOCKS.get_or_init(|| Mutex::new(HashMap::new()));
+        let mut guard = map
+            .lock()
+            .map_err(|_| "Failed to acquire print lock registry".to_string())?;
+        Ok(guard
+            .entry(printer_port.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(())))
+            .clone())
+    }
+
     pub fn list_printers() -> Vec<PrinterInfo> {
         printers::get_printers()
             .into_iter()
@@ -186,7 +223,40 @@ impl PrinterManager {
             .collect()
     }
 
-    pub fn print(printer_port: &str, data: &[u8]) -> Result<String, String> {
+    pub fn print(
+        printer_port: &str,
+        data: &[u8],
+        transport: Option<PrintTransport>,
+        serial_config: Option<SerialPrintConfig>,
+        job_id: &str,
+    ) -> Result<String, String> {
+        let lock = Self::lock_for(printer_port)?;
+        let _guard = lock
+            .lock()
+            .map_err(|_| format!("[print:{job_id}] Failed to acquire printer lock"))?;
+
+        let route = transport.unwrap_or(PrintTransport::Spooler);
+        println!(
+            "[print:{job_id}] start route={:?} printer_port={} bytes={}",
+            route,
+            printer_port,
+            data.len()
+        );
+
+        let result = match route {
+            PrintTransport::Spooler => Self::print_via_spooler(printer_port, data),
+            PrintTransport::Serial => Self::print_via_serial(printer_port, data, serial_config),
+        };
+
+        match &result {
+            Ok(message) => println!("[print:{job_id}] success {}", message),
+            Err(error) => eprintln!("[print:{job_id}] failed {}", error),
+        }
+
+        result
+    }
+
+    fn print_via_spooler(printer_port: &str, data: &[u8]) -> Result<String, String> {
         if let Some(printer) = printers::get_printer_by_name(printer_port) {
             printer
                 .print(data, PrinterJobOptions::none())
@@ -194,16 +264,98 @@ impl PrinterManager {
             return Ok("Printed successfully".into());
         }
 
-        if let Ok(mut port) = serialport::new(printer_port, 9600)
-            .timeout(std::time::Duration::from_secs(2))
+        let known = Self::list_printers()
+            .into_iter()
+            .map(|p| p.port)
+            .collect::<Vec<_>>()
+            .join(", ");
+        Err(format!(
+            "Printer not found for spooler route: {}. Available ports: [{}]",
+            printer_port, known
+        ))
+    }
+
+    fn print_via_serial(
+        printer_port: &str,
+        data: &[u8],
+        config: Option<SerialPrintConfig>,
+    ) -> Result<String, String> {
+        let cfg = config.unwrap_or(SerialPrintConfig {
+            baud_rate: Some(9600),
+            timeout_ms: Some(2000),
+            chunk_size: Some(1024),
+            chunk_delay_ms: Some(5),
+            parity: Some("none".to_string()),
+            stop_bits: Some(1),
+            data_bits: Some(8),
+            flow_control: Some("none".to_string()),
+        });
+
+        let baud_rate = cfg.baud_rate.unwrap_or(9600);
+        let timeout_ms = cfg.timeout_ms.unwrap_or(2000);
+        let chunk_size = cfg.chunk_size.unwrap_or(1024).max(1);
+        let chunk_delay_ms = cfg.chunk_delay_ms.unwrap_or(5);
+
+        let mut port = serialport::new(printer_port, baud_rate)
+            .timeout(Duration::from_millis(timeout_ms))
+            .parity(Self::parse_parity(cfg.parity.as_deref())?)
+            .stop_bits(Self::parse_stop_bits(cfg.stop_bits)?)
+            .data_bits(Self::parse_data_bits(cfg.data_bits)?)
+            .flow_control(Self::parse_flow_control(cfg.flow_control.as_deref())?)
             .open()
-        {
-            port.write_all(data)
-                .map_err(|e| e.to_string())?;
-            return Ok("Printed via serial".into());
+            .map_err(|e| format!("Failed opening serial printer {}: {}", printer_port, e))?;
+
+        for chunk in data.chunks(chunk_size) {
+            port.write_all(chunk)
+                .map_err(|e| format!("Serial write failed: {}", e))?;
+            port.flush()
+                .map_err(|e| format!("Serial flush failed: {}", e))?;
+
+            if chunk_delay_ms > 0 {
+                std::thread::sleep(Duration::from_millis(chunk_delay_ms));
+            }
         }
 
-        Err("Printer not found".into())
+        Ok(format!(
+            "Printed via serial (baud={}, chunk_size={}, delay_ms={})",
+            baud_rate, chunk_size, chunk_delay_ms
+        ))
+    }
+
+    fn parse_parity(value: Option<&str>) -> Result<serialport::Parity, String> {
+        match value.unwrap_or("none").to_lowercase().as_str() {
+            "none" => Ok(serialport::Parity::None),
+            "odd" => Ok(serialport::Parity::Odd),
+            "even" => Ok(serialport::Parity::Even),
+            other => Err(format!("Unsupported serial parity: {}", other)),
+        }
+    }
+
+    fn parse_stop_bits(value: Option<u8>) -> Result<serialport::StopBits, String> {
+        match value.unwrap_or(1) {
+            1 => Ok(serialport::StopBits::One),
+            2 => Ok(serialport::StopBits::Two),
+            other => Err(format!("Unsupported serial stop bits: {}", other)),
+        }
+    }
+
+    fn parse_data_bits(value: Option<u8>) -> Result<serialport::DataBits, String> {
+        match value.unwrap_or(8) {
+            5 => Ok(serialport::DataBits::Five),
+            6 => Ok(serialport::DataBits::Six),
+            7 => Ok(serialport::DataBits::Seven),
+            8 => Ok(serialport::DataBits::Eight),
+            other => Err(format!("Unsupported serial data bits: {}", other)),
+        }
+    }
+
+    fn parse_flow_control(value: Option<&str>) -> Result<serialport::FlowControl, String> {
+        match value.unwrap_or("none").to_lowercase().as_str() {
+            "none" => Ok(serialport::FlowControl::None),
+            "software" | "xonxoff" => Ok(serialport::FlowControl::Software),
+            "hardware" | "rtscts" => Ok(serialport::FlowControl::Hardware),
+            other => Err(format!("Unsupported serial flow control: {}", other)),
+        }
     }
 }
 
@@ -222,7 +374,10 @@ pub fn print_pdf(
     printer_port: String,
     pdf_bytes: Vec<u8>,
     paper_width: Option<usize>,
+    transport: Option<PrintTransport>,
+    serial_config: Option<SerialPrintConfig>,
 ) -> Result<String, String> {
+    let job_id = Uuid::new_v4().to_string();
     let pixel_width = if paper_width.unwrap_or(80) < 70 {
         384
     } else {
@@ -231,11 +386,22 @@ pub fn print_pdf(
     let printer = PDFPrinter::new(app_handle);
     let escpos_data = printer.print_pdf_to_escpos(&pdf_bytes, pixel_width)?;
 
-    PrinterManager::print(&printer_port, &escpos_data)
+    PrinterManager::print(
+        &printer_port,
+        &escpos_data,
+        transport,
+        serial_config,
+        &job_id,
+    )
 }
 
 #[tauri::command]
-pub fn test_print(printer_port: String) -> Result<String, String> {
+pub fn test_print(
+    printer_port: String,
+    transport: Option<PrintTransport>,
+    serial_config: Option<SerialPrintConfig>,
+) -> Result<String, String> {
+    let job_id = Uuid::new_v4().to_string();
     let mut escpos = EscPos::new();
     escpos.init();
     escpos.align(1);
@@ -247,5 +413,11 @@ pub fn test_print(printer_port: String) -> Result<String, String> {
     escpos.feed(3);
     escpos.cut();
 
-    PrinterManager::print(&printer_port, &escpos.build())
+    PrinterManager::print(
+        &printer_port,
+        &escpos.build(),
+        transport,
+        serial_config,
+        &job_id,
+    )
 }

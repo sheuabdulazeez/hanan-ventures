@@ -70,6 +70,15 @@ interface ReceiptSettings {
   paperSize: "80mm" | "58mm";
   printerPort: string;
   printerName?: string;
+  printTransport: "spooler" | "serial";
+  serialBaudRate: number;
+  serialTimeoutMs: number;
+  serialChunkSize: number;
+  serialChunkDelayMs: number;
+  serialParity: "none" | "odd" | "even";
+  serialStopBits: 1 | 2;
+  serialDataBits: 5 | 6 | 7 | 8;
+  serialFlowControl: "none" | "software" | "hardware";
 }
 
 interface SystemSettings {
@@ -106,6 +115,15 @@ export default function SettingsPage() {
     paperSize: "80mm",
     printerPort: "",
     printerName: "",
+    printTransport: "spooler",
+    serialBaudRate: 9600,
+    serialTimeoutMs: 2000,
+    serialChunkSize: 1024,
+    serialChunkDelayMs: 5,
+    serialParity: "none",
+    serialStopBits: 1,
+    serialDataBits: 8,
+    serialFlowControl: "none",
   });
 
   // System Settings State
@@ -148,6 +166,16 @@ export default function SettingsPage() {
           paperSize: (settings.printer_paper_size as "80mm" | "58mm") || "80mm",
           printerPort: settings.printer_port || "",
           printerName: settings.printer_name || "",
+          printTransport: (settings.printer_transport as "spooler" | "serial") || "spooler",
+          serialBaudRate: Number(settings.serial_baud_rate || 9600),
+          serialTimeoutMs: Number(settings.serial_timeout_ms || 2000),
+          serialChunkSize: Number(settings.serial_chunk_size || 1024),
+          serialChunkDelayMs: Number(settings.serial_chunk_delay_ms || 5),
+          serialParity: (settings.serial_parity as "none" | "odd" | "even") || "none",
+          serialStopBits: (Number(settings.serial_stop_bits || 1) as 1 | 2),
+          serialDataBits: (Number(settings.serial_data_bits || 8) as 5 | 6 | 7 | 8),
+          serialFlowControl:
+            (settings.serial_flow_control as "none" | "software" | "hardware") || "none",
         });
         setSystemSettings({
           currency: settings.currency,
@@ -168,6 +196,29 @@ export default function SettingsPage() {
       .catch((err) => console.error("Failed to load printers:", err));
   }, []);
 
+  const getPrintTransportOptions = () => {
+    if (receiptSettings.printTransport !== "serial") {
+      return {
+        transport: "spooler" as const,
+        serialConfig: undefined,
+      };
+    }
+
+    return {
+      transport: "serial" as const,
+      serialConfig: {
+        baud_rate: receiptSettings.serialBaudRate,
+        timeout_ms: receiptSettings.serialTimeoutMs,
+        chunk_size: receiptSettings.serialChunkSize,
+        chunk_delay_ms: receiptSettings.serialChunkDelayMs,
+        parity: receiptSettings.serialParity,
+        stop_bits: receiptSettings.serialStopBits,
+        data_bits: receiptSettings.serialDataBits,
+        flow_control: receiptSettings.serialFlowControl,
+      },
+    };
+  };
+
   const handleTestPrint = async () => {
     if (!receiptSettings.printerPort) {
       toast({ title: "No printer selected", variant: "destructive" });
@@ -175,7 +226,12 @@ export default function SettingsPage() {
     }
     setIsTestingPrint(true);
     try {
-      await invoke("test_print", { printerPort: receiptSettings.printerPort });
+      const options = getPrintTransportOptions();
+      await invoke("test_print", {
+        printerPort: receiptSettings.printerPort,
+        transport: options.transport,
+        serialConfig: options.serialConfig,
+      });
       toast({ title: "Test print sent" });
     } catch (error) {
       toast({
@@ -228,11 +284,14 @@ export default function SettingsPage() {
       const blob = await pdf(doc).toBlob();
       const buffer = await blob.arrayBuffer();
       const bytes = Array.from(new Uint8Array(buffer));
+      const options = getPrintTransportOptions();
 
       await invoke("print_pdf", {
         printerPort: receiptSettings.printerPort,
         pdfBytes: bytes,
         paperWidth: receiptSettings.paperSize === "58mm" ? 58 : 80,
+        transport: options.transport,
+        serialConfig: options.serialConfig,
       });
 
       toast({ title: "PDF sent to printer" });
@@ -298,6 +357,15 @@ export default function SettingsPage() {
         printer_paper_size: receiptSettings.paperSize,
         printer_port: receiptSettings.printerPort,
         printer_name: receiptSettings.printerName || "",
+        printer_transport: receiptSettings.printTransport,
+        serial_baud_rate: String(receiptSettings.serialBaudRate),
+        serial_timeout_ms: String(receiptSettings.serialTimeoutMs),
+        serial_chunk_size: String(receiptSettings.serialChunkSize),
+        serial_chunk_delay_ms: String(receiptSettings.serialChunkDelayMs),
+        serial_parity: receiptSettings.serialParity,
+        serial_stop_bits: String(receiptSettings.serialStopBits),
+        serial_data_bits: String(receiptSettings.serialDataBits),
+        serial_flow_control: receiptSettings.serialFlowControl,
         currency: systemSettings.currency,
         currency_symbol: systemSettings.currencySymbol,
         date_format: systemSettings.dateFormat,
@@ -661,33 +729,47 @@ export default function SettingsPage() {
                             Default Printer
                           </Label>
                           <div className="flex gap-2">
-                            <Select
-                              value={receiptSettings.printerPort}
-                              onValueChange={(val) => {
-                                const selectedPrinter = printers.find(
-                                  (p) => p.port === val,
-                                );
-                                setReceiptSettings((prev) => ({
-                                  ...prev,
-                                  printerPort: val,
-                                  printerName: selectedPrinter?.name || "",
-                                }));
-                              }}
-                            >
-                              <SelectTrigger className="h-11 bg-slate-50 border-slate-200 font-medium focus:bg-white transition-colors flex-1">
-                                <SelectValue placeholder="Select a printer" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {printers.map((printer) => (
-                                  <SelectItem
-                                    key={printer.port}
-                                    value={printer.port}
-                                  >
-                                    {printer.name} ({printer.description})
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                            {receiptSettings.printTransport === "serial" ? (
+                              <Input
+                                value={receiptSettings.printerPort}
+                                onChange={(e) =>
+                                  setReceiptSettings((prev) => ({
+                                    ...prev,
+                                    printerPort: e.target.value,
+                                  }))
+                                }
+                                className="h-11 bg-slate-50 border-slate-200 font-medium focus:bg-white transition-colors flex-1"
+                                placeholder="Enter serial port (e.g. COM3 or /dev/ttyUSB0)"
+                              />
+                            ) : (
+                              <Select
+                                value={receiptSettings.printerPort}
+                                onValueChange={(val) => {
+                                  const selectedPrinter = printers.find(
+                                    (p) => p.port === val,
+                                  );
+                                  setReceiptSettings((prev) => ({
+                                    ...prev,
+                                    printerPort: val,
+                                    printerName: selectedPrinter?.name || "",
+                                  }));
+                                }}
+                              >
+                                <SelectTrigger className="h-11 bg-slate-50 border-slate-200 font-medium focus:bg-white transition-colors flex-1">
+                                  <SelectValue placeholder="Select a printer" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {printers.map((printer) => (
+                                    <SelectItem
+                                      key={printer.port}
+                                      value={printer.port}
+                                    >
+                                      {printer.name} ({printer.description})
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
                             <Button
                               variant="outline"
                               onClick={handleTestPrint}
@@ -757,9 +839,213 @@ export default function SettingsPage() {
                             </Button>
                           </div>
                           <p className="text-[10px] text-slate-400 pt-1">
-                            Select the printer to use for receipts.
+                            {receiptSettings.printTransport === "serial"
+                              ? "Enter the direct serial port path used by your thermal printer."
+                              : "Select the printer to use for receipts."}
                           </p>
                         </div>
+
+                        <div className="space-y-1.5">
+                          <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                            Print Transport
+                          </Label>
+                          <Select
+                            value={receiptSettings.printTransport}
+                            onValueChange={(val) =>
+                              setReceiptSettings((prev) => ({
+                                ...prev,
+                                printTransport: val as "spooler" | "serial",
+                              }))
+                            }
+                          >
+                            <SelectTrigger className="h-11 bg-slate-50 border-slate-200 font-medium focus:bg-white transition-colors">
+                              <SelectValue placeholder="Select print transport" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="spooler">System Spooler</SelectItem>
+                              <SelectItem value="serial">Direct Serial</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <p className="text-[10px] text-slate-400 pt-1">
+                            Use serial mode only when your printer requires direct COM/tty communication.
+                          </p>
+                        </div>
+
+                        {receiptSettings.printTransport === "serial" && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                Baud Rate
+                              </Label>
+                              <Input
+                                type="number"
+                                min={1200}
+                                step={1}
+                                value={receiptSettings.serialBaudRate}
+                                onChange={(e) =>
+                                  setReceiptSettings((prev) => ({
+                                    ...prev,
+                                    serialBaudRate: Math.max(1200, Number(e.target.value) || 9600),
+                                  }))
+                                }
+                                className="h-11 bg-white border-slate-200 font-medium"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                Timeout (ms)
+                              </Label>
+                              <Input
+                                type="number"
+                                min={100}
+                                step={50}
+                                value={receiptSettings.serialTimeoutMs}
+                                onChange={(e) =>
+                                  setReceiptSettings((prev) => ({
+                                    ...prev,
+                                    serialTimeoutMs: Math.max(100, Number(e.target.value) || 2000),
+                                  }))
+                                }
+                                className="h-11 bg-white border-slate-200 font-medium"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                Chunk Size
+                              </Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={receiptSettings.serialChunkSize}
+                                onChange={(e) =>
+                                  setReceiptSettings((prev) => ({
+                                    ...prev,
+                                    serialChunkSize: Math.max(1, Number(e.target.value) || 1024),
+                                  }))
+                                }
+                                className="h-11 bg-white border-slate-200 font-medium"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                Chunk Delay (ms)
+                              </Label>
+                              <Input
+                                type="number"
+                                min={0}
+                                step={1}
+                                value={receiptSettings.serialChunkDelayMs}
+                                onChange={(e) =>
+                                  setReceiptSettings((prev) => ({
+                                    ...prev,
+                                    serialChunkDelayMs: Math.max(0, Number(e.target.value) || 5),
+                                  }))
+                                }
+                                className="h-11 bg-white border-slate-200 font-medium"
+                              />
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                Parity
+                              </Label>
+                              <Select
+                                value={receiptSettings.serialParity}
+                                onValueChange={(val) =>
+                                  setReceiptSettings((prev) => ({
+                                    ...prev,
+                                    serialParity: val as "none" | "odd" | "even",
+                                  }))
+                                }
+                              >
+                                <SelectTrigger className="h-11 bg-white border-slate-200 font-medium">
+                                  <SelectValue placeholder="Parity" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">None</SelectItem>
+                                  <SelectItem value="odd">Odd</SelectItem>
+                                  <SelectItem value="even">Even</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                Stop Bits
+                              </Label>
+                              <Select
+                                value={String(receiptSettings.serialStopBits)}
+                                onValueChange={(val) =>
+                                  setReceiptSettings((prev) => ({
+                                    ...prev,
+                                    serialStopBits: Number(val) as 1 | 2,
+                                  }))
+                                }
+                              >
+                                <SelectTrigger className="h-11 bg-white border-slate-200 font-medium">
+                                  <SelectValue placeholder="Stop bits" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="1">1</SelectItem>
+                                  <SelectItem value="2">2</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                Data Bits
+                              </Label>
+                              <Select
+                                value={String(receiptSettings.serialDataBits)}
+                                onValueChange={(val) =>
+                                  setReceiptSettings((prev) => ({
+                                    ...prev,
+                                    serialDataBits: Number(val) as 5 | 6 | 7 | 8,
+                                  }))
+                                }
+                              >
+                                <SelectTrigger className="h-11 bg-white border-slate-200 font-medium">
+                                  <SelectValue placeholder="Data bits" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="5">5</SelectItem>
+                                  <SelectItem value="6">6</SelectItem>
+                                  <SelectItem value="7">7</SelectItem>
+                                  <SelectItem value="8">8</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                              <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                Flow Control
+                              </Label>
+                              <Select
+                                value={receiptSettings.serialFlowControl}
+                                onValueChange={(val) =>
+                                  setReceiptSettings((prev) => ({
+                                    ...prev,
+                                    serialFlowControl: val as "none" | "software" | "hardware",
+                                  }))
+                                }
+                              >
+                                <SelectTrigger className="h-11 bg-white border-slate-200 font-medium">
+                                  <SelectValue placeholder="Flow control" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="none">None</SelectItem>
+                                  <SelectItem value="software">Software (XON/XOFF)</SelectItem>
+                                  <SelectItem value="hardware">Hardware (RTS/CTS)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          </div>
+                        )}
 
                         <div className="space-y-1.5">
                           <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">
