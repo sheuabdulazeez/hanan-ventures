@@ -15,7 +15,16 @@ export default defineConfig(async () => ({
       "@app": "/src/app",
     }
   },
+  // Tailwind v4 emits modern CSS (oklch colors, etc.) that only Chromium 111+
+  // understands. Older WebView2 runtimes on Windows drop those colors entirely,
+  // so let Lightning CSS add hex/rgb fallbacks for older engines.
+  css: {
+    lightningcss: {
+      targets: { chrome: 87 << 16, edge: 87 << 16, safari: 14 << 16 },
+    },
+  },
   build: {
+    cssMinify: "lightningcss",
     rollupOptions: {
       input: {
         main: "index.html",
